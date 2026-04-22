@@ -3,7 +3,12 @@
 See Summary.md for full project context, architecture decisions, and tech stack.
 
 ## Current Phase
-Phase 0 → Session 2: ContextBuffer + unit tests
+Phase 0 → Session 3: Debouncer + cancellation tests
+
+## Session workflow
+1. Read `PLAN.md` and find the first session not marked `[x]`
+2. Complete all objectives for that session
+3. Mark it `[x]`, commit with the exact message format in PLAN.md, push
 
 ## Key conventions
 - Python: use `uv` for deps, `pyproject.toml`, no requirements.txt

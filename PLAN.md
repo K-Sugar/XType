@@ -40,7 +40,7 @@
 
 ---
 
-### [ ] Session 2 — ContextBuffer + unit tests
+### [x] Session 2 — ContextBuffer + unit tests
 
 **Files:** `ibus-engine/engine/context_buffer.py`, `ibus-engine/tests/test_context_buffer.py`
 
