@@ -3,7 +3,7 @@
 See Summary.md for full project context, architecture decisions, and tech stack.
 
 ## Current Phase
-Phase 0 → Session 3: Debouncer + cancellation tests
+Phase A → Session 4: IBus engine skeleton + XML registration
 
 ## Session workflow
 1. Read `PLAN.md` and find the first session not marked `[x]`

@@ -56,7 +56,7 @@
 
 ---
 
-### [ ] Session 3 — Debouncer + cancellation tests
+### [x] Session 3 — Debouncer + cancellation tests
 
 **Files:** `ibus-engine/engine/debouncer.py`, `ibus-engine/tests/test_debouncer.py`
 
