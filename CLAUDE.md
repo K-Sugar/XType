@@ -1,9 +1,9 @@
-# Cotypist Linux — Claude Code Context
+# XType — Claude Code Context
 
 See Summary.md for full project context, architecture decisions, and tech stack.
 
 ## Current Phase
-Phase 0 → Session 1: Ollama client + latency benchmark
+Phase 0 → Session 2: ContextBuffer + unit tests
 
 ## Key conventions
 - Python: use `uv` for deps, `pyproject.toml`, no requirements.txt

@@ -1,14 +1,14 @@
 
 ```markdown
-# Project Context: Cotypist Linux — System-Wide AI Text Autocomplete for Linux
+# Project Context: XType Linux — System-Wide AI Text Autocomplete for Linux
 
 ## Who I Am
 - Name: Kevin Sugar (kevin.sugar@helsing.ai, Helsing)
 - OS: CachyOS with KDE Plasma on Wayland
-- Goal: Build a Linux clone of https://cotypist.app/ (macOS app by Daniel Gräfe / Accelerated Thought GmbH)
+- Goal: Build a Linux clone of https://XType.app/ (macOS app by Daniel Gräfe / Accelerated Thought GmbH)
 - Approach: Agentic coding (Claude Code / Cursor)
 
-## What Cotypist (macOS) Does
+## What XType (macOS) Does
 - System-wide inline text autocomplete powered by a local LLM (Qwen 2.5 1.5B)
 - Uses macOS Accessibility API (AXUIElement) to monitor focused text fields across all apps
 - Shows ghost text (gray inline suggestions) that you accept word-by-word with Tab
@@ -50,20 +50,20 @@ Input Method (Dev)	IBus custom engine
 Input Method (Prod)	Fcitx5 custom addon
 Text Injection	Input method commit_text (native)
 Ghost Text	Preedit text with gray/underline attributes
-Config	TOML (~/.config/cotypist-linux/config.toml)
+Config	TOML (~/.config/XType-linux/config.toml)
 Packaging	PKGBUILD (AUR), systemd user service
 Build (Fcitx5)	CMake + Ninja
 
 ## Project Structure
 
 ```
-cotypist-linux/
+XType-linux/
 ├── pyproject.toml
 ├── ibus-engine/                    # Phase A: IBus prototype
-│   ├── cotypist.xml                # IBus component descriptor
+│   ├── XType.xml                # IBus component descriptor
 │   ├── engine/
 │   │   ├── main.py                 # Entry point (IBus.init, factory, main loop)
-│   │   ├── engine.py               # CotypistEngine(IBus.Engine) — key handler
+│   │   ├── engine.py               # XTypeEngine(IBus.Engine) — key handler
 │   │   ├── inference.py            # Ollama async client (background thread)
 │   │   ├── context_buffer.py       # Typed text state machine
 │   │   ├── debouncer.py            # Timer-based debounce (180ms default)
@@ -72,18 +72,18 @@ cotypist-linux/
 ├── fcitx5-engine/                  # Phase B: Fcitx5 production
 │   ├── CMakeLists.txt
 │   ├── src/
-│   │   ├── cotypist.h/cpp          # InputMethodEngineV2 implementation
+│   │   ├── XType.h/cpp          # InputMethodEngineV2 implementation
 │   │   ├── inference_client.h/cpp  # libcurl HTTP client for Ollama
 │   │   ├── context_buffer.h/cpp    # C++ port of context buffer
 │   │   └── config.h
 │   └── data/
-│       ├── cotypist-addon.conf.in  # Fcitx5 addon descriptor
-│       └── cotypist.conf           # IM registration
+│       ├── XType-addon.conf.in  # Fcitx5 addon descriptor
+│       └── XType.conf           # IM registration
 ├── shared/prompt_templates/
 ├── packaging/
 │   ├── PKGBUILD
-│   ├── cotypist-linux.service      # systemd user service for Ollama
-│   └── org.cotypist.linux.desktop
+│   ├── XType-linux.service      # systemd user service for Ollama
+│   └── org.XType.linux.desktop
 └── docs/
 ```
 
@@ -122,7 +122,7 @@ cotypist-linux/
 - Fcitx5: `ic->inputPanel().setClientPreedit(text)` with `TextFormatFlag::Underline`
 - Client-side preedit renders inline within the application (not in a separate window)
 
-## Config File (~/.config/cotypist-linux/config.toml)
+## Config File (~/.config/XType-linux/config.toml)
 
 ```toml
 [inference]
@@ -183,7 +183,7 @@ Weeks	Phase
 8. Fcitx5 CMake + addon file scaffold
 9. InferenceClient C++ (libcurl)
 10. ContextBuffer C++ port
-11. CotypistEngine C++ core
+11. XTypeEngine C++ core
 12. KDE Plasma Wayland integration testing
 13. PKGBUILD + systemd + AUR packaging
 
