@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component>
+  <name>org.freedesktop.IBus.XType</name>
+  <description>XType — AI inline autocomplete via Ollama</description>
+  <exec>/usr/bin/env python3 /home/saint/Desktop/XType/ibus-engine/engine/main.py</exec>
+  <version>0.1.0</version>
+  <author>K-Sugar</author>
+  <license>MIT</license>
+  <homepage>https://github.com/K-Sugar/XType</homepage>
+  <textdomain>xtype</textdomain>
+
+  <engines>
+    <engine>
+      <name>xtype</name>
+      <longname>XType</longname>
+      <description>AI inline autocomplete via Ollama (qwen2.5:0.5b)</description>
+      <language>other</language>
+      <license>MIT</license>
+      <author>K-Sugar</author>
+      <icon>ibus-engine</icon>
+      <layout>us</layout>
+      <rank>0</rank>
+      <symbol>Xt</symbol>
+      <version>0.1.0</version>
+    </engine>
+  </engines>
+</component>

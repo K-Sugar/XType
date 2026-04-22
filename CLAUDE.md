@@ -1,22 +1,28 @@
 # XType — Claude Code Context
 
-See Summary.md for full project context, architecture decisions, and tech stack.
-
 ## Current Phase
 Phase A → Session 4: IBus engine skeleton + XML registration
 
+See Summary.md for full project context and architecture.
+See PLAN.md for the session-by-session plan.
+
 ## Session workflow
-1. Read `PLAN.md` and find the first session not marked `[x]`
-2. Complete all objectives for that session
-3. Mark it `[x]`, commit with the exact message format in PLAN.md, push
+1. Read PLAN.md, find the first session not marked [x]
+2. Explore — read all relevant files before writing anything
+3. Plan — summarise your approach; pause before touching more than 3 files
+4. Code, run tests, fix failures
+5. Self-critique: re-read implementation against session objectives + PLAN.md gotchas
+6. Mark session [x], commit with exact message from PLAN.md, push
 
-## Key conventions
-- Python: use `uv` for deps, `pyproject.toml`, no requirements.txt
-- All IBus API calls must happen on the main GLib thread (use GLib.idle_add from inference thread)
-- Ollama runs at http://localhost:11434
-- Target <200ms time-to-first-token
+## Commits
+- One commit per session, exact message from PLAN.md with additions if relevant or applicable
+- Never commit with failing tests
 
-## Do not
-- Use xdotool or any X11 input injection
-- Call IBus/Fcitx5 APIs from background threads
-- Add cloud/telemetry of any kind
+## Hard rules
+- All IBus/Fcitx5 API calls on main thread only — never from inference thread
+- No X11 input injection (no xdotool)
+- No cloud, no telemetry
+- focus-out MUST commit preedit
+
+## Context management
+- Run /compact after planning, before implementation on long sessions

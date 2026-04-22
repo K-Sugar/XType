@@ -13,6 +13,11 @@
 5. Commit with the exact message format shown for that session
 6. Push to `origin main`
 
+## Commits
+- One commit per session, using the exact message in PLAN.md
+- Never commit with failing tests
+- Never bundle two sessions into one commit
+
 ---
 
 ## Status legend
@@ -72,7 +77,7 @@
 
 ## Phase A — IBus Prototype (Python)
 
-### [ ] Session 4 — IBus engine skeleton + XML registration
+### [x] Session 4 — IBus engine skeleton + XML registration
 
 **Files:** `ibus-engine/cotypist.xml`, `ibus-engine/engine/main.py`, `ibus-engine/engine/engine.py`
 
