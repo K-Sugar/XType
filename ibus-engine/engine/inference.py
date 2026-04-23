@@ -87,6 +87,12 @@ class InferenceClient:
             self._schedule, context, on_token, on_done, on_error
         )
 
+    def cancel(self) -> None:
+        """Cancel any in-flight inference request without starting a new one."""
+        if self._loop is None:
+            return
+        self._loop.call_soon_threadsafe(self._cancel_current)
+
     def health_check(self) -> bool:
         """Blocking check: is Ollama reachable and is the model available?"""
         import urllib.request
@@ -126,6 +132,11 @@ class InferenceClient:
     async def _close_session(self) -> None:
         if self._session:
             await self._session.close()
+
+    def _cancel_current(self) -> None:
+        if self._current_task and not self._current_task.done():
+            self._current_task.cancel()
+        self._current_task = None
 
     def _schedule(
         self,

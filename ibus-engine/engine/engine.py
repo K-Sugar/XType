@@ -189,5 +189,6 @@ class CotypistEngine(IBus.Engine):
     def _reset_state(self) -> None:
         self._gen += 1
         self._debouncer.cancel()
-        self._ctx.dismiss()
+        self._inference.cancel()
+        self._ctx.reset()
         self.update_preedit_text(IBus.Text.new_from_string(""), 0, False)

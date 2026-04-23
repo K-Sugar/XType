@@ -113,7 +113,7 @@
 
 ---
 
-### [ ] Session 6 — Focus/reset/commit edge cases
+### [x] Session 6 — Focus/reset/commit edge cases
 
 **Files:** `ibus-engine/engine/engine.py` (extend)
 

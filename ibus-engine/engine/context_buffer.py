@@ -97,3 +97,8 @@ class ContextBuffer:
     def dismiss(self) -> None:
         """Clear the active suggestion without modifying the buffer."""
         self._suggestion = None
+
+    def reset(self) -> None:
+        """Clear both the typed-text buffer and any active suggestion."""
+        self._buffer.clear()
+        self._suggestion = None

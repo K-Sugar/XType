@@ -271,3 +271,46 @@ def test_accept_all_respects_maxlen():
     cb.set_suggestion("x" * 20)
     cb.accept_all()
     assert len(cb.context_text) == 500
+
+
+# ---------------------------------------------------------------------------
+# reset
+# ---------------------------------------------------------------------------
+
+
+def test_reset_clears_buffer():
+    cb = buf("a", "b", "c")
+    cb.reset()
+    assert cb.context_text == ""
+
+
+def test_reset_clears_suggestion():
+    cb = ContextBuffer()
+    cb.set_suggestion("hello world")
+    cb.reset()
+    assert not cb.has_suggestion
+    assert cb.suggestion is None
+
+
+def test_reset_clears_both():
+    cb = buf("t", "y", "p", "e", " ")
+    cb.set_suggestion("this")
+    cb.reset()
+    assert cb.context_text == ""
+    assert not cb.has_suggestion
+
+
+def test_reset_on_empty_buffer_no_crash():
+    cb = ContextBuffer()
+    cb.reset()  # must not raise
+    assert cb.context_text == ""
+    assert not cb.has_suggestion
+
+
+def test_reset_allows_fresh_use():
+    cb = buf("h", "e", "l", "l", "o")
+    cb.set_suggestion("world")
+    cb.reset()
+    cb.append_char("x")
+    assert cb.context_text == "x"
+    assert not cb.has_suggestion
