@@ -144,19 +144,20 @@
 
 ---
 
-### [ ] Session 8 — IBus end-to-end integration test
+### [x] Session 8 — IBus end-to-end integration test
 
-**Files:** `docs/testing-ibus.md`, manual test log, `~/.config/environment.d/ibus.conf`
+**Files:** `docs/testing-ibus.md`, `~/.config/environment.d/ibus.conf`, `ibus-engine/engine/main.py`
 
 **Objectives:**
 - Write `~/.config/environment.d/ibus.conf` with `QT_IM_MODULE=ibus`, `GTK_IM_MODULE=ibus`, `XMODIFIERS=@im=ibus` so all apps pick up IBus automatically on login (no per-launch env prefixing needed)
+- Add rotating file logger to `main.py` → `~/.local/share/xtype/engine.log` (always DEBUG, 1 MB / 3 rotations) for post-test analysis
 - Test in Kate (Qt6, text-input-v2): ghost text appears inline, Tab accepts word-by-word
-- Test in Firefox (GTK3, text-input-v3): set `GTK_IM_MODULE=fcitx`, verify preedit
-- Verify Konsole is blocklisted (no preedit, no glitches)
-- Verify focus-out commit in all three apps
+- Test in Zen Browser (GTK3, text-input-v3): `GTK_IM_MODULE=ibus`, verify preedit
+- Verify Alacritty is blocklisted (no preedit, no glitches)
+- Verify focus-out commit in Kate and Zen Browser
 - Document any issues in `docs/testing-ibus.md`
 
-**Commit:** `test(ibus): end-to-end validation on KDE Wayland — Kate + Firefox + Konsole`
+**Commit:** `test(ibus): end-to-end validation on KDE Wayland — Kate + Zen + Alacritty`
 
 ---
 

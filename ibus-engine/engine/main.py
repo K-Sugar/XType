@@ -2,10 +2,11 @@
 """XType IBus engine entry point."""
 
 import logging
+import logging.handlers
 import os
-import sys
-
 import signal
+import sys
+from pathlib import Path
 
 import gi
 gi.require_version("IBus", "1.0")
@@ -13,16 +14,41 @@ from gi.repository import GLib, IBus
 
 from .engine import XTypeEngine
 
-logging.basicConfig(
-    level=logging.DEBUG if os.environ.get("XTYPE_DEBUG") else logging.INFO,
-    format="%(asctime)s %(name)s %(levelname)s %(message)s",
-)
+_LOG_PATH = Path.home() / ".local" / "share" / "xtype" / "engine.log"
+
+
+def _setup_logging() -> None:
+    """Configure stderr + rotating file logging.
+
+    File handler always writes DEBUG so logs survive the session for analysis.
+    Stderr respects XTYPE_DEBUG.
+    """
+    _LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+    root = logging.getLogger()
+    root.setLevel(logging.DEBUG)
+    fmt = logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s")
+
+    stderr = logging.StreamHandler()
+    stderr.setLevel(logging.DEBUG if os.environ.get("XTYPE_DEBUG") else logging.INFO)
+    stderr.setFormatter(fmt)
+    root.addHandler(stderr)
+
+    fh = logging.handlers.RotatingFileHandler(
+        _LOG_PATH, maxBytes=1_000_000, backupCount=3, encoding="utf-8"
+    )
+    fh.setLevel(logging.DEBUG)
+    fh.setFormatter(fmt)
+    root.addHandler(fh)
+
+
 log = logging.getLogger(__name__)
 
 ENGINE_NAME = "xtype"
 
 
 def main() -> None:
+    _setup_logging()
     IBus.init()
     bus = IBus.Bus()
 

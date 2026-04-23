@@ -14,6 +14,7 @@ from .inference import InferenceClient, InferenceConfig
 log = logging.getLogger(__name__)
 
 _KEY_TAB = IBus.KEY_Tab
+_KEY_ISO_LEFT_TAB = IBus.KEY_ISO_Left_Tab  # Shift+Tab on most Linux systems
 _KEY_ESC = IBus.KEY_Escape
 _KEY_ENTER = IBus.KEY_Return
 _KEY_KP_ENTER = IBus.KEY_KP_Enter
@@ -66,18 +67,24 @@ class XTypeEngine(IBus.Engine):
     # ------------------------------------------------------------------
 
     def do_focus_in_id(self, object_path: str, client: str) -> None:
-        log.debug("focus_in_id: client=%r path=%r", client, object_path)
+        # On KDE Wayland the KWin IBus bridge never calls this — client is always "".
+        # Blocklist via app_id is therefore unreliable on Wayland.
         self._app_id = client or ""
+        log.debug("focus_in_id: client=%r path=%r", client, object_path)
+        if not self._app_id:
+            log.debug("focus_in_id: no client identity (KWin/Wayland bridge) — blocklist inactive")
         self._reset_state()
 
     def do_focus_in(self) -> None:
-        log.debug("focus_in (fallback)")
+        # Fallback when do_focus_in_id is not called (always on KDE Wayland).
+        log.debug("focus_in (fallback) — app_id will be empty, blocklist inactive")
         self._reset_state()
 
     def do_focus_out(self) -> None:
-        # MUST commit any active preedit before clearing — text is lost otherwise
-        if self._ctx.has_suggestion:
-            self.commit_text(IBus.Text.new_from_string(self._ctx.suggestion or ""))
+        # XType preedit is an AI suggestion, not user input — dismiss on focus-out.
+        # commit_text after focus transfer is unreliable on Wayland and would silently
+        # insert AI text the user never accepted.
+        log.debug("focus_out: suggestion=%r — dismissing", self._ctx.suggestion)
         self._reset_state()
 
     def do_reset(self) -> None:
@@ -103,13 +110,18 @@ class XTypeEngine(IBus.Engine):
 
         has_suggestion = self._ctx.has_suggestion
 
-        # Tab — accept next word; Shift+Tab — accept entire suggestion
-        if keyval == _KEY_TAB:
+        # Tab — accept next word; Shift+Tab / ISO_Left_Tab — accept entire suggestion
+        if keyval in (_KEY_TAB, _KEY_ISO_LEFT_TAB):
             if has_suggestion:
-                if state & IBus.ModifierType.SHIFT_MASK:
-                    self.commit_text(IBus.Text.new_from_string(self._ctx.accept_all()))
+                accept_all = keyval == _KEY_ISO_LEFT_TAB or bool(state & IBus.ModifierType.SHIFT_MASK)
+                if accept_all:
+                    accepted = self._ctx.accept_all()
+                    log.debug("accept_all: committed %r", accepted)
+                    self.commit_text(IBus.Text.new_from_string(accepted))
                 else:
-                    self.commit_text(IBus.Text.new_from_string(self._ctx.accept_next_word()))
+                    accepted = self._ctx.accept_next_word()
+                    log.debug("accept_next_word: committed %r", accepted)
+                    self.commit_text(IBus.Text.new_from_string(accepted))
                 self._update_preedit()
                 return True
             return False
@@ -159,12 +171,14 @@ class XTypeEngine(IBus.Engine):
         """Kick off an inference request. Called on the GLib main thread by the debouncer."""
         context = self._ctx.context_text
         if len(context) < self._cfg.inference.min_context_chars:
+            log.debug("inference skipped: context too short (%d < %d chars)",
+                      len(context), self._cfg.inference.min_context_chars)
             return
-        # Truncate context to the configured window (send most-recent chars)
         if len(context) > self._cfg.inference.context_window:
             context = context[-self._cfg.inference.context_window:]
         self._gen += 1
         gen = self._gen
+        log.debug("inference request gen=%d context=%r", gen, context)
         self._inference.request(
             context=context,
             on_token=lambda tok: GLib.idle_add(self._handle_token, tok, gen),
@@ -177,6 +191,7 @@ class XTypeEngine(IBus.Engine):
         if gen != self._gen:
             return False
         self._ctx.set_suggestion((self._ctx.suggestion or "") + token)
+        log.debug("token gen=%d suggestion=%r", gen, self._ctx.suggestion)
         self._update_preedit()
         return False
 
@@ -186,6 +201,7 @@ class XTypeEngine(IBus.Engine):
             return False
         if self._ctx.has_suggestion:
             self._ctx.set_suggestion((self._ctx.suggestion or "").strip())
+            log.debug("inference done gen=%d final=%r", gen, self._ctx.suggestion)
             self._update_preedit()
         return False
 
@@ -204,8 +220,10 @@ class XTypeEngine(IBus.Engine):
     def _update_preedit(self) -> None:
         if self._ctx.has_suggestion:
             text = self._ctx.suggestion or ""
+            log.debug("preedit set: %r", text)
             self.update_preedit_text(_preedit_text(text), len(text), True)
         else:
+            log.debug("preedit cleared")
             self.update_preedit_text(IBus.Text.new_from_string(""), 0, False)
 
     def _reset_state(self) -> None:
