@@ -1,4 +1,4 @@
-"""CotypistEngine — IBus engine for XType."""
+"""XTypeEngine — IBus engine for XType."""
 
 import logging
 
@@ -37,7 +37,7 @@ def _preedit_text(text: str) -> IBus.Text:
     return t
 
 
-class CotypistEngine(IBus.Engine):
+class XTypeEngine(IBus.Engine):
     """XType IBus engine — passes typed text through and shows AI suggestions as preedit."""
 
     def __init__(self, config: AppConfig | None = None) -> None:
@@ -66,11 +66,12 @@ class CotypistEngine(IBus.Engine):
     # ------------------------------------------------------------------
 
     def do_focus_in_id(self, object_path: str, client: str) -> None:
+        log.debug("focus_in_id: client=%r path=%r", client, object_path)
         self._app_id = client or ""
         self._reset_state()
 
     def do_focus_in(self) -> None:
-        # do_focus_in_id is preferred; this fires as a fallback on older IBus
+        log.debug("focus_in (fallback)")
         self._reset_state()
 
     def do_focus_out(self) -> None:
@@ -87,6 +88,7 @@ class CotypistEngine(IBus.Engine):
     # ------------------------------------------------------------------
 
     def do_process_key_event(self, keyval: int, keycode: int, state: int) -> bool:
+        log.debug("key: val=%r code=%r state=%r", keyval, keycode, state)
         # Ignore key releases
         if state & IBus.ModifierType.RELEASE_MASK:
             return False
@@ -142,6 +144,7 @@ class CotypistEngine(IBus.Engine):
         ch = IBus.keyval_to_unicode(keyval)
         if ch and ch.isprintable():
             self._invalidate()
+            self._update_preedit()
             self._ctx.append_char(ch)
             self._debouncer.trigger(self._request_inference)
             return False

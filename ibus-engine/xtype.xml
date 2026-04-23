@@ -2,7 +2,7 @@
 <component>
   <name>org.freedesktop.IBus.XType</name>
   <description>XType — AI inline autocomplete via Ollama</description>
-  <exec>/usr/bin/env python3 /home/saint/Desktop/XType/ibus-engine/engine/main.py</exec>
+  <exec>/home/saint/Desktop/XType/ibus-engine/.venv/bin/python3 /home/saint/Desktop/XType/ibus-engine/engine/main.py</exec>
   <version>0.1.0</version>
   <author>K-Sugar</author>
   <license>MIT</license>

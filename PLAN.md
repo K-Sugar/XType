@@ -146,9 +146,10 @@
 
 ### [ ] Session 8 — IBus end-to-end integration test
 
-**Files:** `docs/testing-ibus.md`, manual test log
+**Files:** `docs/testing-ibus.md`, manual test log, `~/.config/environment.d/ibus.conf`
 
 **Objectives:**
+- Write `~/.config/environment.d/ibus.conf` with `QT_IM_MODULE=ibus`, `GTK_IM_MODULE=ibus`, `XMODIFIERS=@im=ibus` so all apps pick up IBus automatically on login (no per-launch env prefixing needed)
 - Test in Kate (Qt6, text-input-v2): ghost text appears inline, Tab accepts word-by-word
 - Test in Firefox (GTK3, text-input-v3): set `GTK_IM_MODULE=fcitx`, verify preedit
 - Verify Konsole is blocklisted (no preedit, no glitches)

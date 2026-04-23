@@ -5,11 +5,13 @@ import logging
 import os
 import sys
 
+import signal
+
 import gi
 gi.require_version("IBus", "1.0")
-from gi.repository import IBus
+from gi.repository import GLib, IBus
 
-from .engine import CotypistEngine
+from .engine import XTypeEngine
 
 logging.basicConfig(
     level=logging.DEBUG if os.environ.get("XTYPE_DEBUG") else logging.INFO,
@@ -29,15 +31,18 @@ def main() -> None:
         sys.exit(1)
 
     factory = IBus.Factory.new(bus.get_connection())
-    factory.add_engine(ENGINE_NAME, CotypistEngine.__gtype__)
+    factory.add_engine(ENGINE_NAME, XTypeEngine.__gtype__)
 
     if not bus.register_component(IBus.Component.new_from_file(
-        os.path.join(os.path.dirname(__file__), "..", "cotypist.xml")
+        os.path.join(os.path.dirname(__file__), "..", "xtype.xml")
     )):
         log.warning("Failed to register component (daemon may have auto-loaded it)")
 
     bus.set_global_engine_async(ENGINE_NAME, -1, None, None, None)
     log.info("XType IBus engine started")
+
+    GLib.unix_signal_add(GLib.PRIORITY_HIGH, signal.SIGINT, IBus.quit)
+    GLib.unix_signal_add(GLib.PRIORITY_HIGH, signal.SIGTERM, IBus.quit)
 
     IBus.main()
 
