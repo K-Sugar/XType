@@ -6,6 +6,7 @@ import gi
 gi.require_version("IBus", "1.0")
 from gi.repository import GLib, IBus
 
+from .config import AppConfig, load_config
 from .context_buffer import ContextBuffer
 from .debouncer import Debouncer
 from .inference import InferenceClient, InferenceConfig
@@ -39,21 +40,37 @@ def _preedit_text(text: str) -> IBus.Text:
 class CotypistEngine(IBus.Engine):
     """XType IBus engine — passes typed text through and shows AI suggestions as preedit."""
 
-    def __init__(self, config: InferenceConfig | None = None) -> None:
+    def __init__(self, config: AppConfig | None = None) -> None:
         super().__init__()
+        cfg = config or load_config()
+        self._cfg = cfg
+
         self._ctx = ContextBuffer()
-        self._debouncer = Debouncer(schedule=GLib.idle_add)
-        self._inference = InferenceClient(config or InferenceConfig())
+        self._debouncer = Debouncer(delay_ms=cfg.inference.debounce_ms, schedule=GLib.idle_add)
+        self._inference = InferenceClient(InferenceConfig(
+            model=cfg.inference.model,
+            ollama_host=cfg.inference.ollama_host,
+        ))
         self._inference.start()
-        # Generation counter: bumped whenever the current suggestion is invalidated.
-        # GLib.idle_add callbacks capture gen at dispatch time and no-op if stale.
+
+        # Generation counter: bumped on every invalidation to silence stale callbacks.
         self._gen = 0
+        # Client app identifier populated by do_focus_in_id for blocklist checks.
+        self._app_id: str = ""
+
+        if not self._inference.health_check():
+            log.warning("Ollama unreachable or model '%s' not available", cfg.inference.model)
 
     # ------------------------------------------------------------------
     # IBus lifecycle
     # ------------------------------------------------------------------
 
+    def do_focus_in_id(self, object_path: str, client: str) -> None:
+        self._app_id = client or ""
+        self._reset_state()
+
     def do_focus_in(self) -> None:
+        # do_focus_in_id is preferred; this fires as a fallback on older IBus
         self._reset_state()
 
     def do_focus_out(self) -> None:
@@ -72,6 +89,10 @@ class CotypistEngine(IBus.Engine):
     def do_process_key_event(self, keyval: int, keycode: int, state: int) -> bool:
         # Ignore key releases
         if state & IBus.ModifierType.RELEASE_MASK:
+            return False
+
+        # Blocklisted app — pass everything through immediately
+        if self._cfg.is_blocked(self._app_id):
             return False
 
         # Modifier combos (Ctrl/Alt/Super) — always pass through
@@ -112,7 +133,6 @@ class CotypistEngine(IBus.Engine):
                 self._invalidate()
                 self._update_preedit()
                 return True
-            # No suggestion: remove the last typed char and cancel pending inference
             self._invalidate()
             self._ctx.backspace()
             self._debouncer.cancel()
@@ -135,8 +155,11 @@ class CotypistEngine(IBus.Engine):
     def _request_inference(self) -> None:
         """Kick off an inference request. Called on the GLib main thread by the debouncer."""
         context = self._ctx.context_text
-        if not context.strip():
+        if len(context) < self._cfg.inference.min_context_chars:
             return
+        # Truncate context to the configured window (send most-recent chars)
+        if len(context) > self._cfg.inference.context_window:
+            context = context[-self._cfg.inference.context_window:]
         self._gen += 1
         gen = self._gen
         self._inference.request(
@@ -171,11 +194,7 @@ class CotypistEngine(IBus.Engine):
     # ------------------------------------------------------------------
 
     def _invalidate(self) -> None:
-        """Bump the generation counter and dismiss any active suggestion.
-
-        Any GLib.idle_add callbacks from the current inference generation will
-        silently no-op once they see gen != self._gen.
-        """
+        """Bump the generation counter and dismiss any active suggestion."""
         self._gen += 1
         self._ctx.dismiss()
 

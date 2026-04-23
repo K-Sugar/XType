@@ -128,7 +128,7 @@
 
 ---
 
-### [ ] Session 7 — Config system + blocklist
+### [x] Session 7 — Config system + blocklist
 
 **Files:** `ibus-engine/engine/config.py`, `ibus-engine/tests/test_config.py`
 
