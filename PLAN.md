@@ -92,7 +92,7 @@
 
 ---
 
-### [ ] Session 5 — Preedit + Tab/Escape/Backspace UX
+### [x] Session 5 — Preedit + Tab/Escape/Backspace UX
 
 **Files:** `ibus-engine/engine/engine.py` (extend)
 
