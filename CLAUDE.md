@@ -1,7 +1,7 @@
 # XType — Claude Code Context
 
 ## Current Phase
-Phase A → Session 4: IBus engine skeleton + XML registration
+Phase B → Session 10: InferenceClient C++ (libcurl)
 
 See Summary.md for full project context and architecture.
 See PLAN.md for the session-by-session plan.
@@ -19,6 +19,7 @@ See PLAN.md for the session-by-session plan.
 - Never commit with failing tests
 
 ## Hard rules
+- Always use the venv for development to keep dependencies clean.
 - All IBus/Fcitx5 API calls on main thread only — never from inference thread
 - No X11 input injection (no xdotool)
 - No cloud, no telemetry

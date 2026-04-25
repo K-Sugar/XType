@@ -163,14 +163,14 @@
 
 ## Phase B — Fcitx5 Production (C++17)
 
-### [ ] Session 9 — CMake scaffold + addon descriptor
+### [x] Session 9 — CMake scaffold + addon descriptor
 
-**Files:** `fcitx5-engine/CMakeLists.txt`, `fcitx5-engine/data/cotypist-addon.conf.in`, `fcitx5-engine/data/cotypist.conf`
+**Files:** `fcitx5-engine/CMakeLists.txt`, `fcitx5-engine/data/xtype-addon.conf.in`, `fcitx5-engine/data/xtype.conf`
 
 **Objectives:**
-- CMakeLists.txt: find Fcitx5, C++17, shared library target `cotypist-fcitx5`
-- `cotypist-addon.conf.in`: addon type=SharedLibrary, category=InputMethod
-- `cotypist.conf`: IM registration (name, native name, icon)
+- CMakeLists.txt: find Fcitx5, C++17, shared library target `xtype-fcitx5`
+- `xtype-addon.conf.in`: addon type=SharedLibrary, category=InputMethod
+- `xtype.conf`: IM registration (name, native name, icon)
 - Verify: `cmake -B build -G Ninja && ninja -C build` produces the .so
 
 **Commit:** `feat(fcitx5): cmake scaffold + addon descriptor`
@@ -205,12 +205,12 @@
 
 ---
 
-### [ ] Session 12 — CotypistEngine C++ core
+### [ ] Session 12 — XTypeEngine C++ core
 
-**Files:** `fcitx5-engine/src/cotypist.h`, `fcitx5-engine/src/cotypist.cpp`
+**Files:** `fcitx5-engine/src/xtype.h`, `fcitx5-engine/src/xtype.cpp`
 
 **Objectives:**
-- `CotypistEngine : public fcitx::InputMethodEngineV2`
+- `XTypeEngine : public fcitx::InputMethodEngineV2`
 - Override `keyEvent()`: same logic as IBus Python engine
 - `ic->inputPanel().setClientPreedit()` with `TextFormatFlag::Underline`
 - Focus-out: commit preedit via `ic->commitString()` before clearing
@@ -238,7 +238,7 @@
 
 ### [ ] Session 14 — PKGBUILD + systemd + AUR
 
-**Files:** `packaging/PKGBUILD`, `packaging/cotypist-linux.service`, `packaging/org.cotypist.linux.desktop`
+**Files:** `packaging/PKGBUILD`, `packaging/xtype-linux.service`, `packaging/org.xtype.linux.desktop`
 
 **Objectives:**
 - PKGBUILD: depends on `fcitx5`, `ollama`, `python`, split package (ibus-dev + fcitx5-prod)

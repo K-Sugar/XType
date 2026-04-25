@@ -3,12 +3,12 @@
 # Project Context: XType Linux — System-Wide AI Text Autocomplete for Linux
 
 ## Who I Am
-- Name: Kevin Sugar (kevin.sugar@helsing.ai, Helsing)
+- Name: Kevin Sugar 
 - OS: CachyOS with KDE Plasma on Wayland
-- Goal: Build a Linux clone of https://XType.app/ (macOS app by Daniel Gräfe / Accelerated Thought GmbH)
+- Goal: Build a Linux clone of https://Cotypist.app/ (macOS app by Daniel Gräfe / Accelerated Thought GmbH)
 - Approach: Agentic coding (Claude Code / Cursor)
 
-## What XType (macOS) Does
+## What Cotypist (macOS) Does
 - System-wide inline text autocomplete powered by a local LLM (Qwen 2.5 1.5B)
 - Uses macOS Accessibility API (AXUIElement) to monitor focused text fields across all apps
 - Shows ghost text (gray inline suggestions) that you accept word-by-word with Tab
