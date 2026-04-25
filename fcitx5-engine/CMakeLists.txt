@@ -13,15 +13,17 @@ if(BUILD_TESTS)
     find_package(Catch2 3 REQUIRED)
 endif()
 
+# context_buffer compiled once; reused by the addon and the test binary
+add_library(context_buffer_obj OBJECT src/context_buffer.cpp)
+target_include_directories(context_buffer_obj PUBLIC src)
+
 add_library(xtype-fcitx5 SHARED
     src/xtype.cpp
-    src/context_buffer.cpp
     src/inference_client.cpp
 )
-
 target_include_directories(xtype-fcitx5 PRIVATE src)
-
 target_link_libraries(xtype-fcitx5 PRIVATE
+    context_buffer_obj
     Fcitx5::Core
     CURL::libcurl
 )
@@ -39,5 +41,6 @@ install(FILES data/xtype.conf
 )
 
 if(BUILD_TESTS)
+    include(CTest)
     add_subdirectory(tests)
 endif()

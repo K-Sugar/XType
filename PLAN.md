@@ -192,7 +192,7 @@
 
 ---
 
-### [ ] Session 11 — ContextBuffer C++ port
+### [x] Session 11 — ContextBuffer C++ port
 
 **Files:** `fcitx5-engine/src/context_buffer.h`, `fcitx5-engine/src/context_buffer.cpp`
 

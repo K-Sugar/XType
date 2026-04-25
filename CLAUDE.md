@@ -1,7 +1,7 @@
 # XType — Claude Code Context
 
 ## Current Phase
-Phase B → Session 11: ContextBuffer C++ port
+Phase B → Session 12: XTypeEngine C++ core
 
 See Summary.md for full project context and architecture.
 See PLAN.md for the session-by-session plan.
