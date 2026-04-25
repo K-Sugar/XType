@@ -229,9 +229,8 @@ void XTypeEngine::requestInference(
                         while (!s.empty() &&
                                std::isspace(static_cast<unsigned char>(s.back())))
                             s.pop_back();
-                        // Strip any prefix that echoes the end of the context —
-                        // small models tend to repeat recently accepted text.
                         const std::string ctx = _ctx.contextText();
+                        // Strip tail-of-context echo: model repeats recently typed text.
                         constexpr size_t kMaxCheck = 80;
                         size_t check = std::min({s.size(), ctx.size(), kMaxCheck});
                         for (size_t len = check; len >= 4; --len) {
@@ -239,6 +238,20 @@ void XTypeEngine::requestInference(
                                 s.erase(0, len);
                                 break;
                             }
+                        }
+                        // Strip head-of-context echo: model reproduces the document
+                        // from the beginning instead of completing at [CURSOR].
+                        // Case-insensitive match on the first 12 chars is enough to
+                        // identify this pattern without false-positives on short words.
+                        constexpr size_t kHeadCheck = 12;
+                        if (!s.empty() && s.size() >= kHeadCheck && ctx.size() >= kHeadCheck) {
+                            auto lower = [](std::string t) {
+                                std::transform(t.begin(), t.end(), t.begin(),
+                                               [](unsigned char c){ return std::tolower(c); });
+                                return t;
+                            };
+                            if (lower(s.substr(0, kHeadCheck)) == lower(ctx.substr(0, kHeadCheck)))
+                                s.clear();
                         }
                         _ctx.setSuggestion(std::move(s));
                     }

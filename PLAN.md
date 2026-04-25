@@ -301,43 +301,34 @@ Log entries `deactivate prog=chromium hasSuggestion=1` confirm that the `commitS
 
 ## Phase C — Packaging & Polish
 
-### [ ] Session 14 — Model upgrade + cursor-marker prompt (anti-loop)
+### [x] Session 14 — Model upgrade + assistant-prefill chat format (anti-loop)
 
-**Files:** `fcitx5-engine/src/inference_client.cpp`, `fcitx5-engine/src/config.h`
+**Files:** `fcitx5-engine/src/inference_client.cpp`, `fcitx5-engine/src/config.h`, `fcitx5-engine/src/xtype.cpp`
 
-**Context:** The 0.5b model echoes recently accepted text because it sees its own output in the context buffer and treats it as a pattern to continue. Two root-cause fixes: (1) upgrade to qwen2.5:1.5b, which reliably follows "don't repeat" instructions — the 0.5b model cannot; (2) append a cursor-marker token (`[CURSOR]`) to the end of the prompt so the model has an unambiguous signal of exactly where generation should start, preventing it from regenerating anything before the marker.
+**What was built:**
+1. `config.h`: `model = "qwen2.5:1.5b"`, `debounce_ms = 220`, `context_window = 150`
+2. `inference_client.cpp`: switched to `/api/chat`, assistant-prefill message structure, `json_str` key `"response"` → `"content"`, verbose stream_cb logs removed
+3. `xtype.cpp`: extended echo detection to strip suggestions that echo the beginning of the context (not just the tail)
 
-**Objectives:**
-1. Pull the new model: `ollama pull qwen2.5:1.5b`
-2. Update `config.h` default: `model = "qwen2.5:1.5b"`, increase `debounce_ms` to 220 to absorb the extra latency
-3. In `build_payload()`, append the marker to the context before JSON-encoding it:
-   ```cpp
-   std::string markedContext = context + "[CURSOR]";
-   ```
-4. Update `SYSTEM_PROMPT` to reference the marker:
-   ```
-   "Complete the text at [CURSOR]. Output ONLY what follows [CURSOR], never reproduce text before it. Be concise."
-   ```
-5. Switch the endpoint from `/api/generate` to `/api/chat` — Qwen2.5 is instruction-tuned using the ChatML template; the chat endpoint activates it, while generate bypasses it and produces worse instruction-following:
-   - URL: `_cfg.ollama_host + "/api/chat"`
-   - Request format: `{"model":"...","messages":[{"role":"system","content":"..."},{"role":"user","content":"...text...[CURSOR]"}],"stream":true,"options":{...}}`
-   - Drop the top-level `"system"` and `"prompt"` keys from `build_payload`; the system message now lives in `messages[0]`
-   - The `"options"` block (`num_predict`, `temperature`, `top_p`, `stop`) stays at the top level unchanged
-6. Update the streaming response parser — `/api/chat` emits `"message":{"role":"assistant","content":"token"}` instead of `"response":"token"`:
-   - In `stream_cb`, change `json_str(line, "response")` → `json_str(line, "content")`
-   - This works because `"content":"` appears exactly once per chat stream line; no nested-JSON parser needed
-   - Verify with `iclog` that tokens arrive correctly before removing debug output
-7. Remove the per-request debug logging added during session 13 (`"stream_cb: raw=..."`, `"stream_cb: line=..."`) — these were diagnostic and are now noise; keep only `"execute:"`, `"run: dispatching"`, and error lines
-8. Verify `health_check()` still works — it searches `/api/tags` body for `'"' + model + '"'`; no code change needed, just confirm the new model name appears after pulling
-9. Test anti-loop: type a sentence, accept the suggestion with Tab, type more — the next suggestion must not open with words already visible in the buffer
+**Anti-loop strategy (final):**
+The planned `[CURSOR]` marker in a `user` message was implemented and tested, but introduced a new failure: Qwen's chat fine-tuning treats conversational text in the `user` role as something to *respond to* ("Hey Chris, how are you " → "I'm doing well, thanks for asking"). Pivoted to **assistant prefill**: the context is placed in an `assistant` message so the model continues its own incomplete output rather than responding to user input. `[CURSOR]` is not needed — the end of the assistant message is unambiguous. System prompt simplified accordingly.
+
+**Final message structure:**
+```json
+[
+  {"role": "system",    "content": "You are an inline text autocomplete engine..."},
+  {"role": "assistant", "content": "<context text>"}
+]
+```
 
 **Gotchas:**
-- `/api/chat` `stop` tokens go inside `"options"`, not as a top-level `"stop"` array — verify the payload builder puts them in the right place
-- `json_str(line, "content")` will correctly find `"content":"` inside the nested `"message"` object because our flat string search doesn't care about nesting depth; it will not accidentally match other fields because no other top-level field is named `"content"` in the Ollama chat stream format
-- The final `done:true` line in chat format is `{"message":{"role":"assistant","content":""},"done":true,...}` — `json_str(line, "content")` returns `""`, which is already handled by the `if (!token.empty())` guard in `stream_cb`
-- If latency is still too high at 1.5b, try `qwen2.5-coder:1.5b` — it is specifically trained on text completion tasks and may loop less on prose too
+- `[CURSOR]` marker was dropped — unnecessary with assistant prefill, and it caused the model to echo it literally in some outputs
+- `context_window = 150` (not 500) — reducing this was required to prevent the model from echoing the beginning of a long context even with the correct message structure
+- Head-of-context echo detection: the existing tail-strip in `xtype.cpp` does not catch echoes that start at char 0 of the context; added a case-insensitive 12-char head comparison that clears the suggestion entirely when matched
+- `/api/chat` restart: `fcitx5-remote -r`, not `fcitx5 -r` — the latter tries to spawn a second instance and fails on DBus name conflict
+- **Two occurrences of `json_str(..., "response")`** in `inference_client.cpp`: one in `stream_cb` and one in the post-loop flush block in `execute()` — both must be updated to `"content"`
 
-**Commit:** `feat(fcitx5): qwen2.5:1.5b + [CURSOR] marker prompt — anti-loop inference redesign`
+**Commit:** `feat(fcitx5): qwen2.5:1.5b + assistant-prefill chat format — anti-loop inference redesign`
 
 ---
 

@@ -18,8 +18,9 @@ static void iclog(const char *fmt, ...) {
 }
 
 static constexpr char SYSTEM_PROMPT[] =
-    "Complete the text naturally. Output only the continuation, never repeat the input. "
-    "Be concise. Stop at sentence end.";
+    "You are an inline text autocomplete engine. Continue the text you are given with a "
+    "few natural words. Output ONLY the continuation. No explanations, no responses, "
+    "no punctuation at the start.";
 
 // ── JSON helpers ──────────────────────────────────────────────────────────────
 
@@ -103,10 +104,14 @@ static std::string build_payload(const InferenceConfig& cfg, const std::string& 
         *r.ptr = '\0';
     }
 
+    // Assistant-prefill: context is placed in an incomplete assistant turn.
+    // The model continues its own text, bypassing the chat-response pattern that
+    // fires when conversational text appears in the user role.
     return std::string(R"({"model":")") + json_escape(cfg.model)
-         + R"(","prompt":")"  + json_escape(context)
-         + R"(","system":")"  + json_escape(SYSTEM_PROMPT)
-         + R"(","stream":true,"options":{"num_predict":)"
+         + R"(","messages":[)"
+         + R"({"role":"system","content":")"    + json_escape(SYSTEM_PROMPT) + R"("},)"
+         + R"({"role":"assistant","content":")" + json_escape(context) + R"("})"
+         + R"(],"stream":true,"options":{"num_predict":)"
          + std::to_string(cfg.num_predict)
          + R"(,"temperature":)" + temp_buf
          + R"(,"top_p":)"      + top_p_buf
@@ -127,16 +132,10 @@ struct WriteState {
 
 static size_t stream_cb(char* ptr, size_t /*size*/, size_t nmemb, void* ud) {
     auto* s = static_cast<WriteState*>(ud);
-    iclog("stream_cb: %zu bytes gen=%llu/%llu",
-          nmemb, (unsigned long long)s->my_gen,
-          (unsigned long long)s->cur_gen.load(std::memory_order_relaxed));
     // Returning 0 aborts curl with CURLE_WRITE_ERROR — our cancel signal.
-    if (s->my_gen != s->cur_gen.load(std::memory_order_relaxed)) {
-        iclog("stream_cb: cancelled");
+    if (s->my_gen != s->cur_gen.load(std::memory_order_relaxed))
         return 0;
-    }
 
-    iclog("stream_cb: raw='%.*s'", (int)std::min(nmemb, (size_t)200), ptr);
     s->line_buf.append(ptr, nmemb);
 
     size_t start = 0, nl;
@@ -144,9 +143,9 @@ static size_t stream_cb(char* ptr, size_t /*size*/, size_t nmemb, void* ud) {
         std::string_view line(s->line_buf.data() + start, nl - start);
         start = nl + 1;
         if (line.empty()) continue;
-        auto token = json_str(line, "response");
-        iclog("stream_cb: line='%.80s' token='%s'",
-              std::string(line).c_str(), token.c_str());
+        // /api/chat emits {"message":{"role":"assistant","content":"token"},...}
+        // json_str flat-searches for "content":" regardless of nesting depth.
+        auto token = json_str(line, "content");
         if (!token.empty()) s->on_token(std::move(token));
     }
     s->line_buf.erase(0, start);
@@ -245,7 +244,7 @@ void InferenceClient::execute(Req& req) {
     }
 
     std::string payload = build_payload(_cfg, req.context);
-    std::string url     = _cfg.ollama_host + "/api/generate";
+    std::string url     = _cfg.ollama_host + "/api/chat";
 
     WriteState ws(req.gen, _gen, req.on_token);
 
@@ -269,7 +268,7 @@ void InferenceClient::execute(Req& req) {
     // Flush any data not terminated by \n (last chunk from Ollama may omit it).
     if (!ws.line_buf.empty()) {
         iclog("execute: flushing line_buf='%.200s'", ws.line_buf.c_str());
-        auto token = json_str(ws.line_buf, "response");
+        auto token = json_str(ws.line_buf, "content");
         if (!token.empty()) req.on_token(std::move(token));
         ws.line_buf.clear();
     }
