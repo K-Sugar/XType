@@ -28,16 +28,19 @@ target_link_libraries(xtype-fcitx5 PRIVATE
     CURL::libcurl
 )
 
-fcitx5_translate_desktop_file(data/xtype-addon.conf.in data/xtype-addon.conf)
+set(ADDON_LIB "libxtype-fcitx5")
+configure_file(data/xtype.conf.in
+    ${CMAKE_CURRENT_BINARY_DIR}/data/xtype.conf @ONLY)
 
 install(TARGETS xtype-fcitx5
     LIBRARY DESTINATION "${FCITX_INSTALL_ADDONDIR}"
 )
-install(FILES "${CMAKE_CURRENT_BINARY_DIR}/data/xtype-addon.conf"
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/data/xtype.conf"
     DESTINATION "${FCITX_INSTALL_PKGDATADIR}/addon"
 )
-install(FILES data/xtype.conf
+install(FILES data/xtype-im.conf
     DESTINATION "${FCITX_INSTALL_PKGDATADIR}/inputmethod"
+    RENAME xtype.conf
 )
 
 if(BUILD_TESTS)
