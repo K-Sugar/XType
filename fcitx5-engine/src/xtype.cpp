@@ -1,5 +1,6 @@
 #include "xtype.h"
 
+#include <algorithm>
 #include <cctype>
 #include <cstdarg>
 #include <cstdio>
@@ -54,25 +55,41 @@ XTypeEngine::XTypeEngine(fcitx::AddonManager *manager)
 
 void XTypeEngine::activate(const fcitx::InputMethodEntry &,
                            fcitx::InputContextEvent &event) {
-    dbg("activate prog=%s", event.inputContext()->program().c_str());
-    resetState(event.inputContext());
+    auto *ic = event.inputContext();
+    const std::string &prog = ic->program();
+    dbg("activate prog=%s _lastProg=%s", prog.c_str(), _lastProg.c_str());
+    if (prog != _lastProg)
+        resetState(ic);       // app changed: full reset including _ctx
+    else
+        resetInferenceOnly(); // same app cycling (Zen GTK4 pattern): preserve _ctx
+    _lastProg = prog;
 }
 
 void XTypeEngine::deactivate(const fcitx::InputMethodEntry &,
                               fcitx::InputContextEvent &event) {
     auto *ic = event.inputContext();
     dbg("deactivate prog=%s hasSuggestion=%d", ic->program().c_str(), (int)_ctx.hasSuggestion());
-    // commitString("") sends an explicit empty commit via the Wayland protocol,
-    // which discards the displayed preedit before the IM client auto-commits it on
-    // focus-out. Without this, Qt/GTK apps commit the clientPreedit themselves.
-    if (_ctx.hasSuggestion())
-        ic->commitString("");
-    resetState(ic);
+    // commitString("") is an atomic text-input-v3 transaction: it sends commit_string("") +
+    // set_preedit_string("", 0, 0) + commit() in one shot. Unlike updatePreedit() alone, this
+    // guarantees the client receives a commit() event, which is required for changes to take
+    // effect. Called unconditionally so Chromium always commits empty rather than ghost text.
+    ic->commitString("");
+    clearPreedit(ic);
+    _ctx.dismiss();
+    resetInferenceOnly(); // cancel debounce + inference; _ctx typed text preserved for same-app cycling
 }
 
 void XTypeEngine::reset(const fcitx::InputMethodEntry &,
                         fcitx::InputContextEvent &event) {
-    resetState(event.inputContext());
+    auto *ic = event.inputContext();
+    dbg("reset prog=%s", ic->program().c_str());
+    // The IM protocol "reset" means discard preedit state — not wipe the user's typed context.
+    // GTK4 apps (Zen/Firefox) send reset() after every keystroke. Do NOT cancel _debounceTimer
+    // here: that would prevent the 180ms debounce from ever firing, so inference would never run.
+    _ctx.dismiss();
+    clearPreedit(ic);
+    _inference.cancel();
+    ++_gen;
 }
 
 // ── Key event ─────────────────────────────────────────────────────────────────
@@ -262,15 +279,22 @@ void XTypeEngine::resetState(fcitx::InputContext *ic) {
     clearPreedit(ic);
 }
 
+void XTypeEngine::resetInferenceOnly() {
+    _debounceTimer.reset();
+    _inference.cancel();
+    ++_gen;
+}
+
 void XTypeEngine::invalidate() {
     ++_gen;
     _ctx.dismiss();
 }
 
 bool XTypeEngine::isBlocked(const std::string &program) const {
-    for (const auto &app : _cfg.behaviour.blocklist_apps) {
-        if (program.find(app) != std::string::npos) return true;
-    }
+    std::string prog_lower = program;
+    std::transform(prog_lower.begin(), prog_lower.end(), prog_lower.begin(), ::tolower);
+    for (const auto &app : _cfg.behaviour.blocklist_apps)
+        if (prog_lower.find(app) != std::string::npos) return true;
     return false;
 }
 

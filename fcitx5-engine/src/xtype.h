@@ -35,6 +35,7 @@ private:
     void updatePreedit(fcitx::InputContext *ic);
     void clearPreedit(fcitx::InputContext *ic);
     void resetState(fcitx::InputContext *ic);
+    void resetInferenceOnly();
     void invalidate();
     bool isBlocked(const std::string &program) const;
 
@@ -44,4 +45,5 @@ private:
     InferenceClient                          _inference;
     std::unique_ptr<fcitx::EventSourceTime>  _debounceTimer;
     uint64_t                                 _gen{0};
+    std::string                              _lastProg;
 };

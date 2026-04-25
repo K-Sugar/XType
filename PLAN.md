@@ -234,7 +234,7 @@
 
 ---
 
-### [ ] Session 13.5 — Browser compatibility: Zen + Chromium ghost text
+### [x] Session 13.5 — Browser compatibility: Zen + Chromium ghost text
 
 **Files:** `fcitx5-engine/src/xtype.cpp`, `fcitx5-engine/src/config.h`
 
