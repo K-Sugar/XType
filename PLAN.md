@@ -205,7 +205,7 @@
 
 ---
 
-### [ ] Session 12 — XTypeEngine C++ core
+### [x] Session 12 — XTypeEngine C++ core
 
 **Files:** `fcitx5-engine/src/xtype.h`, `fcitx5-engine/src/xtype.cpp`
 
@@ -213,7 +213,7 @@
 - `XTypeEngine : public fcitx::InputMethodEngineV2`
 - Override `keyEvent()`: same logic as IBus Python engine
 - `ic->inputPanel().setClientPreedit()` with `TextFormatFlag::Underline`
-- Focus-out: commit preedit via `ic->commitString()` before clearing
+- Focus-out: dismiss preedit (clear without committing) — ghost text is AI suggestion, not user input; committing on focus-out inserts unwanted text
 - Wire `InferenceClient` callbacks to preedit updates on main thread
 
 **Commit:** `feat(fcitx5): full engine core — key handler + preedit + focus`
