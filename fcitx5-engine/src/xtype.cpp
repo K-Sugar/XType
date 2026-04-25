@@ -1,8 +1,9 @@
 #include "xtype.h"
 
-#include <algorithm>
 #include <cctype>
+#include <cstdarg>
 #include <cstdio>
+#include <ctime>
 #include <string>
 
 #include <fcitx-utils/eventloopinterface.h>
@@ -17,8 +18,23 @@
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+static FILE *dbg_file() {
+    static FILE *f = std::fopen("/home/saint/Desktop/XType/fcitx5-engine/debug.log", "w");  // truncate on each engine load
+    return f;
+}
+static void dbg(const char *fmt, ...) {
+    FILE *f = dbg_file();
+    if (!f) return;
+    std::time_t t = std::time(nullptr);
+    char ts[20];
+    std::strftime(ts, sizeof(ts), "%H:%M:%S", std::localtime(&t));
+    std::fprintf(f, "[%s] ", ts);
+    va_list ap; va_start(ap, fmt); std::vfprintf(f, fmt, ap); va_end(ap);
+    std::fputc('\n', f); std::fflush(f);
+}
 static void log_warn(const char *msg) {
     std::fprintf(stderr, "[xtype] WARNING: %s\n", msg);
+    dbg("WARN: %s", msg);
 }
 
 // ── XTypeEngine ───────────────────────────────────────────────────────────────
@@ -27,22 +43,31 @@ XTypeEngine::XTypeEngine(fcitx::AddonManager *manager)
     : _instance(manager->instance()),
       _inference(_cfg.inference)
 {
+    dbg("XTypeEngine loaded, model=%s", _cfg.inference.model.c_str());
     if (!_inference.health_check())
         log_warn("Ollama unreachable or model not available — suggestions disabled");
+    else
+        dbg("health_check OK");
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 void XTypeEngine::activate(const fcitx::InputMethodEntry &,
                            fcitx::InputContextEvent &event) {
+    dbg("activate prog=%s", event.inputContext()->program().c_str());
     resetState(event.inputContext());
 }
 
 void XTypeEngine::deactivate(const fcitx::InputMethodEntry &,
                               fcitx::InputContextEvent &event) {
-    // Ghost text is AI suggestion, not user input. Dismiss without committing —
-    // committing on focus-out would silently insert text the user never accepted.
-    resetState(event.inputContext());
+    auto *ic = event.inputContext();
+    dbg("deactivate prog=%s hasSuggestion=%d", ic->program().c_str(), (int)_ctx.hasSuggestion());
+    // commitString("") sends an explicit empty commit via the Wayland protocol,
+    // which discards the displayed preedit before the IM client auto-commits it on
+    // focus-out. Without this, Qt/GTK apps commit the clientPreedit themselves.
+    if (_ctx.hasSuggestion())
+        ic->commitString("");
+    resetState(ic);
 }
 
 void XTypeEngine::reset(const fcitx::InputMethodEntry &,
@@ -118,6 +143,8 @@ void XTypeEngine::keyEvent(const fcitx::InputMethodEntry &,
     // Printable ASCII (space through ~). Pass key through to app, update buffer,
     // arm debounce timer for inference.
     if (sym >= FcitxKey_space && sym <= FcitxKey_asciitilde) {
+        dbg("key '%c' prog=%s ctx_len=%zu", static_cast<char>(sym),
+            ic->program().c_str(), _ctx.contextText().size());
         invalidate();
         updatePreedit(ic);
         _ctx.appendChar(static_cast<char>(sym));
@@ -156,9 +183,12 @@ void XTypeEngine::requestInference(
     ++_gen;
     const uint64_t myGen = _gen;
 
+    dbg("requestInference ctx='%.40s...'", ctx.c_str());
     _inference.request(
         std::move(ctx),
         [this, myGen, icRef, icPtr](std::string token) {
+            dbg("token received: '%s' icValid=%d", token.c_str(), (int)icRef.isValid());
+            if (!icRef.isValid()) { dbg("on_token: icRef invalid — dropping"); return; }
             _instance->eventDispatcher().scheduleWithContext(
                 icRef,
                 [this, myGen, tok = std::move(token), icPtr]() {
@@ -166,25 +196,39 @@ void XTypeEngine::requestInference(
                     std::string current =
                         _ctx.hasSuggestion() ? *_ctx.suggestion() : "";
                     _ctx.setSuggestion(current + tok);
+                    dbg("preedit updated: '%s'", _ctx.suggestion()->c_str());
                     updatePreedit(icPtr);
                 });
         },
         [this, myGen, icRef, icPtr]() {
+            dbg("inference done, myGen=%llu curGen=%llu", (unsigned long long)myGen, (unsigned long long)_gen);
             _instance->eventDispatcher().scheduleWithContext(
                 icRef,
                 [this, myGen, icPtr]() {
                     if (myGen != _gen) return;
                     if (_ctx.hasSuggestion()) {
                         std::string s = *_ctx.suggestion();
+                        // Strip trailing whitespace.
                         while (!s.empty() &&
                                std::isspace(static_cast<unsigned char>(s.back())))
                             s.pop_back();
+                        // Strip any prefix that echoes the end of the context —
+                        // small models tend to repeat recently accepted text.
+                        const std::string ctx = _ctx.contextText();
+                        constexpr size_t kMaxCheck = 80;
+                        size_t check = std::min({s.size(), ctx.size(), kMaxCheck});
+                        for (size_t len = check; len >= 4; --len) {
+                            if (ctx.compare(ctx.size() - len, len, s, 0, len) == 0) {
+                                s.erase(0, len);
+                                break;
+                            }
+                        }
                         _ctx.setSuggestion(std::move(s));
                     }
                     updatePreedit(icPtr);
                 });
         },
-        [](std::string) {}  // on_error: silent
+        [](std::string err) { dbg("inference error: %s", err.c_str()); }
     );
 }
 
@@ -193,7 +237,9 @@ void XTypeEngine::requestInference(
 void XTypeEngine::updatePreedit(fcitx::InputContext *ic) {
     auto &panel = ic->inputPanel();
     if (_ctx.hasSuggestion()) {
-        fcitx::Text t(*_ctx.suggestion(), fcitx::TextFormatFlag::Underline);
+        fcitx::Text t(*_ctx.suggestion(),
+                      fcitx::TextFormatFlags{fcitx::TextFormatFlag::Underline,
+                                             fcitx::TextFormatFlag::DontCommit});
         panel.setClientPreedit(t);
     } else {
         panel.setClientPreedit(fcitx::Text{});

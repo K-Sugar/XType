@@ -23,7 +23,7 @@ See PLAN.md for the session-by-session plan.
 - All IBus/Fcitx5 API calls on main thread only — never from inference thread
 - No X11 input injection (no xdotool)
 - No cloud, no telemetry
-- focus-out MUST commit preedit
+- focus-out MUST NOT commit AI ghost text — call commitString("") to discard before resetState
 
 ## Context management
 - Run /compact after planning, before implementation on long sessions

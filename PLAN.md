@@ -220,7 +220,7 @@
 
 ---
 
-### [ ] Session 13 — KDE Plasma Wayland integration
+### [x] Session 13 — KDE Plasma Wayland integration
 
 **Files:** `docs/testing-fcitx5.md`
 
@@ -234,9 +234,114 @@
 
 ---
 
+### [ ] Session 13.5 — Browser compatibility: Zen + Chromium ghost text
+
+**Files:** `fcitx5-engine/src/xtype.cpp`, `fcitx5-engine/src/config.h`
+
+**Root-cause analysis (from debug.log):**
+
+**Zen Browser — no ghost text:**
+Log lines like `key 'g' prog=zen ctx_len=0` appear on every keystroke, with `ctx_len` never growing. Between keystrokes, rapid `deactivate prog=zen` / `activate prog=zen` pairs appear. `activate()` calls `resetState()` which calls `_ctx.reset()`, wiping the context buffer on every key. Zen (GTK4/Firefox Wayland IM) cycles deactivate+activate per keystroke — this is normal GTK4 behaviour, not a bug. With the current code, `min_context_chars=10` is never reachable.
+
+**Chromium — ghost text commits on defocus:**
+Log entries `deactivate prog=chromium hasSuggestion=1` confirm that the `commitString("")` guard DOES see the suggestion — unlike Kate, where the suggestion was already gone by `deactivate()`. Yet ghost text still commits. `TextFormatFlag::DontCommit` is a Fcitx5-internal signal; Chromium's own text-input-v3 implementation ignores it and commits the preedit via the Wayland protocol before the engine's deactivate callback can act.
+
+**Objectives:**
+
+1. **Fix Zen context buffer reset:**
+   - Change `activate()` to NOT call `resetState()`. Instead call a new `resetInferenceOnly()` helper that cancels in-flight inference and increments `_gen` but leaves `_ctx` intact.
+   - Only wipe `_ctx` in `deactivate()` when the program changes (track `_lastProg` member, compare against `ic->program()`).
+   - `reset()` and explicit refocus to a different app should still call full `resetState()`.
+   - After fix, verify `ctx_len` grows correctly in Zen between keystrokes.
+
+2. **Fix Chromium focus-out commit:**
+   - The current `deactivate()` calls `commitString("")` when `hasSuggestion`. This fires the empty commit AFTER Chromium has already committed the old preedit.
+   - Fix: call `clearPreedit(ic)` (sets empty preedit + `updatePreedit()`) at the TOP of `deactivate()`, unconditionally. This sends an empty preedit to the Wayland compositor before Fcitx5 processes the deactivation commit. Even if Chromium then commits the preedit, it commits an empty string.
+   - Implementation in `deactivate()`:
+     ```cpp
+     void XTypeEngine::deactivate(...) {
+         auto *ic = event.inputContext();
+         dbg("deactivate prog=%s hasSuggestion=%d", ...);
+         clearPreedit(ic);          // clear preedit first — prevents Chromium from committing ghost text
+         if (_ctx.hasSuggestion())
+             ic->commitString("");  // belt-and-suspenders for other IM clients
+         resetState(ic);
+     }
+     ```
+
+3. **Fix blocklist case mismatch:**
+   - `config.h` has `{"konsole", "alacritty"}` but Fcitx5 reports `ic->program()` as `"Konsole"` and `"Alacritty"` (capitalised). Change `isBlocked()` to do case-insensitive comparison, or lowercase the program name before matching.
+   - Simplest fix: lowercase both sides in `isBlocked()`:
+     ```cpp
+     bool XTypeEngine::isBlocked(const std::string &program) const {
+         std::string prog_lower = program;
+         std::transform(prog_lower.begin(), prog_lower.end(), prog_lower.begin(), ::tolower);
+         for (const auto &app : _cfg.behaviour.blocklist_apps) {
+             if (prog_lower.find(app) != std::string::npos) return true;
+         }
+         return false;
+     }
+     ```
+
+4. **Rebuild, reinstall, and test:**
+   - Kate: ghost text still works, no regression
+   - Zen Browser: ghost text now appears after typing ≥10 chars
+   - Chromium: ghost text appears, does NOT commit on defocus
+   - Konsole/Alacritty: blocklist correctly suppresses ghost text (case fix)
+
+**Gotchas:**
+- `clearPreedit()` in `deactivate()` must fire before the Wayland commit sequence completes — calling it synchronously at the top of `deactivate()` achieves this, since Fcitx5 flushes the display update before sending the commit signal to the client.
+- Zen's per-keystroke activate/deactivate means `_lastProg` tracking must compare by value, not pointer — `ic->program()` returns a `const std::string &` which is stable.
+- Do not remove the `commitString("")` guard — it is still needed for any Wayland IM client that does not respect `DontCommit` but also does not auto-commit (belt-and-suspenders).
+- `resetInferenceOnly()` must increment `_gen` so in-flight token callbacks from the previous request are dropped on dispatch.
+
+**Commit:** `fix(fcitx5): browser compat — Zen context reset + Chromium focus-out commit`
+
+---
+
 ## Phase C — Packaging & Polish
 
-### [ ] Session 14 — PKGBUILD + systemd + AUR
+### [ ] Session 14 — Model upgrade + cursor-marker prompt (anti-loop)
+
+**Files:** `fcitx5-engine/src/inference_client.cpp`, `fcitx5-engine/src/config.h`
+
+**Context:** The 0.5b model echoes recently accepted text because it sees its own output in the context buffer and treats it as a pattern to continue. Two root-cause fixes: (1) upgrade to qwen2.5:1.5b, which reliably follows "don't repeat" instructions — the 0.5b model cannot; (2) append a cursor-marker token (`[CURSOR]`) to the end of the prompt so the model has an unambiguous signal of exactly where generation should start, preventing it from regenerating anything before the marker.
+
+**Objectives:**
+1. Pull the new model: `ollama pull qwen2.5:1.5b`
+2. Update `config.h` default: `model = "qwen2.5:1.5b"`, increase `debounce_ms` to 220 to absorb the extra latency
+3. In `build_payload()`, append the marker to the context before JSON-encoding it:
+   ```cpp
+   std::string markedContext = context + "[CURSOR]";
+   ```
+4. Update `SYSTEM_PROMPT` to reference the marker:
+   ```
+   "Complete the text at [CURSOR]. Output ONLY what follows [CURSOR], never reproduce text before it. Be concise."
+   ```
+5. Switch the endpoint from `/api/generate` to `/api/chat` — Qwen2.5 is instruction-tuned using the ChatML template; the chat endpoint activates it, while generate bypasses it and produces worse instruction-following:
+   - URL: `_cfg.ollama_host + "/api/chat"`
+   - Request format: `{"model":"...","messages":[{"role":"system","content":"..."},{"role":"user","content":"...text...[CURSOR]"}],"stream":true,"options":{...}}`
+   - Drop the top-level `"system"` and `"prompt"` keys from `build_payload`; the system message now lives in `messages[0]`
+   - The `"options"` block (`num_predict`, `temperature`, `top_p`, `stop`) stays at the top level unchanged
+6. Update the streaming response parser — `/api/chat` emits `"message":{"role":"assistant","content":"token"}` instead of `"response":"token"`:
+   - In `stream_cb`, change `json_str(line, "response")` → `json_str(line, "content")`
+   - This works because `"content":"` appears exactly once per chat stream line; no nested-JSON parser needed
+   - Verify with `iclog` that tokens arrive correctly before removing debug output
+7. Remove the per-request debug logging added during session 13 (`"stream_cb: raw=..."`, `"stream_cb: line=..."`) — these were diagnostic and are now noise; keep only `"execute:"`, `"run: dispatching"`, and error lines
+8. Verify `health_check()` still works — it searches `/api/tags` body for `'"' + model + '"'`; no code change needed, just confirm the new model name appears after pulling
+9. Test anti-loop: type a sentence, accept the suggestion with Tab, type more — the next suggestion must not open with words already visible in the buffer
+
+**Gotchas:**
+- `/api/chat` `stop` tokens go inside `"options"`, not as a top-level `"stop"` array — verify the payload builder puts them in the right place
+- `json_str(line, "content")` will correctly find `"content":"` inside the nested `"message"` object because our flat string search doesn't care about nesting depth; it will not accidentally match other fields because no other top-level field is named `"content"` in the Ollama chat stream format
+- The final `done:true` line in chat format is `{"message":{"role":"assistant","content":""},"done":true,...}` — `json_str(line, "content")` returns `""`, which is already handled by the `if (!token.empty())` guard in `stream_cb`
+- If latency is still too high at 1.5b, try `qwen2.5-coder:1.5b` — it is specifically trained on text completion tasks and may loop less on prose too
+
+**Commit:** `feat(fcitx5): qwen2.5:1.5b + [CURSOR] marker prompt — anti-loop inference redesign`
+
+---
+
+### [ ] Session 15 — PKGBUILD + systemd + AUR
 
 **Files:** `packaging/PKGBUILD`, `packaging/xtype-linux.service`, `packaging/org.xtype.linux.desktop`
 
@@ -250,7 +355,7 @@
 
 ---
 
-### [ ] Session 15 — Settings UI + per-app profiles
+### [ ] Session 16 — Settings UI + per-app profiles
 
 **Files:** `settings/` (new directory)
 
@@ -281,7 +386,7 @@ Scopes: `inference`, `context-buffer`, `debouncer`, `ibus`, `fcitx5`, `config`, 
 
 ## Quick reference — critical gotchas
 
-1. **Focus-out MUST commit preedit** — text is silently lost otherwise
+1. **Focus-out MUST NOT commit AI ghost text** — use `TextFormatFlag::DontCommit` on the client preedit; committing on focus-out inserts text the user never accepted
 2. **Never call IBus/Fcitx5 APIs from the inference thread** — always marshal to main thread
 3. **Fcitx5 on KDE Wayland** — must be launched by KWin, not autostarted
 4. **Chromium/Electron** — need flags/env vars for text-input-v3 preedit support

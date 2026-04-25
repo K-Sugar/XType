@@ -4,7 +4,7 @@
 #include <vector>
 
 struct InferenceConfig {
-    std::string              model             = "qwen2.5:1.5b";
+    std::string              model             = "qwen2.5:0.5b";
     std::string              ollama_host       = "http://localhost:11434";
     int                      debounce_ms       = 180;
     int                      min_context_chars = 10;

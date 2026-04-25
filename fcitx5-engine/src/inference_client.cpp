@@ -1,12 +1,25 @@
 #include "inference_client.h"
 
 #include <curl/curl.h>
+#include <charconv>
+#include <cstdarg>
 #include <cstdio>
 #include <string_view>
 
+static FILE *ic_logfile() {
+    static FILE *f = std::fopen("/home/saint/Desktop/XType/fcitx5-engine/thread.log", "w");
+    return f;
+}
+static void iclog(const char *fmt, ...) {
+    FILE *f = ic_logfile();
+    if (!f) return;
+    va_list ap; va_start(ap, fmt); std::vfprintf(f, fmt, ap); va_end(ap);
+    std::fputc('\n', f); std::fflush(f);
+}
+
 static constexpr char SYSTEM_PROMPT[] =
-    "Output ONLY the completion text, no explanation. "
-    "5-15 words max. Stop at sentence boundaries.";
+    "Complete the text naturally. Output only the continuation, never repeat the input. "
+    "Be concise. Stop at sentence end.";
 
 // ── JSON helpers ──────────────────────────────────────────────────────────────
 
@@ -74,9 +87,21 @@ static std::string build_payload(const InferenceConfig& cfg, const std::string& 
     }
     stop_arr += ']';
 
-    char temp_buf[16], top_p_buf[16];
-    std::snprintf(temp_buf,  sizeof(temp_buf),  "%.4g", static_cast<double>(cfg.temperature));
-    std::snprintf(top_p_buf, sizeof(top_p_buf), "%.4g", static_cast<double>(cfg.top_p));
+    // std::to_chars is locale-independent — snprintf respects LC_NUMERIC and would
+    // emit "0,3" instead of "0.3" under European locales, breaking Ollama's JSON parser.
+    char temp_buf[32] = {}, top_p_buf[32] = {};
+    {
+        auto r = std::to_chars(temp_buf, temp_buf + sizeof(temp_buf) - 1,
+                               static_cast<double>(cfg.temperature),
+                               std::chars_format::general, 6);
+        *r.ptr = '\0';
+    }
+    {
+        auto r = std::to_chars(top_p_buf, top_p_buf + sizeof(top_p_buf) - 1,
+                               static_cast<double>(cfg.top_p),
+                               std::chars_format::general, 6);
+        *r.ptr = '\0';
+    }
 
     return std::string(R"({"model":")") + json_escape(cfg.model)
          + R"(","prompt":")"  + json_escape(context)
@@ -102,9 +127,16 @@ struct WriteState {
 
 static size_t stream_cb(char* ptr, size_t /*size*/, size_t nmemb, void* ud) {
     auto* s = static_cast<WriteState*>(ud);
+    iclog("stream_cb: %zu bytes gen=%llu/%llu",
+          nmemb, (unsigned long long)s->my_gen,
+          (unsigned long long)s->cur_gen.load(std::memory_order_relaxed));
     // Returning 0 aborts curl with CURLE_WRITE_ERROR — our cancel signal.
-    if (s->my_gen != s->cur_gen.load(std::memory_order_relaxed)) return 0;
+    if (s->my_gen != s->cur_gen.load(std::memory_order_relaxed)) {
+        iclog("stream_cb: cancelled");
+        return 0;
+    }
 
+    iclog("stream_cb: raw='%.*s'", (int)std::min(nmemb, (size_t)200), ptr);
     s->line_buf.append(ptr, nmemb);
 
     size_t start = 0, nl;
@@ -113,6 +145,8 @@ static size_t stream_cb(char* ptr, size_t /*size*/, size_t nmemb, void* ud) {
         start = nl + 1;
         if (line.empty()) continue;
         auto token = json_str(line, "response");
+        iclog("stream_cb: line='%.80s' token='%s'",
+              std::string(line).c_str(), token.c_str());
         if (!token.empty()) s->on_token(std::move(token));
     }
     s->line_buf.erase(0, start);
@@ -183,6 +217,7 @@ bool InferenceClient::health_check() {
 }
 
 void InferenceClient::run() {
+    iclog("inference thread started");
     while (true) {
         std::optional<Req> req;
         {
@@ -192,13 +227,19 @@ void InferenceClient::run() {
             req = std::move(_pending);
             _pending.reset();
         }
-        if (req) execute(*req);
+        if (req) {
+            iclog("run: dispatching gen=%llu", (unsigned long long)req->gen);
+            execute(*req);
+        }
     }
+    iclog("inference thread exiting");
 }
 
 void InferenceClient::execute(Req& req) {
+    iclog("execute: gen=%llu ctx='%.40s'", (unsigned long long)req.gen, req.context.c_str());
     CURL* curl = curl_easy_init();
     if (!curl) {
+        iclog("execute: curl_easy_init failed");
         req.on_error("curl_easy_init failed");
         return;
     }
@@ -224,6 +265,14 @@ void InferenceClient::execute(Req& req) {
     CURLcode res = curl_easy_perform(curl);
     curl_slist_free_all(headers);
     curl_easy_cleanup(curl);
+
+    // Flush any data not terminated by \n (last chunk from Ollama may omit it).
+    if (!ws.line_buf.empty()) {
+        iclog("execute: flushing line_buf='%.200s'", ws.line_buf.c_str());
+        auto token = json_str(ws.line_buf, "response");
+        if (!token.empty()) req.on_token(std::move(token));
+        ws.line_buf.clear();
+    }
 
     // CURLE_WRITE_ERROR means stream_cb returned 0 — i.e. we were cancelled.
     bool cancelled = (req.gen != _gen.load());
