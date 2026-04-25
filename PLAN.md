@@ -177,7 +177,7 @@
 
 ---
 
-### [ ] Session 10 — InferenceClient C++ (libcurl)
+### [x] Session 10 — InferenceClient C++ (libcurl)
 
 **Files:** `fcitx5-engine/src/inference_client.h`, `fcitx5-engine/src/inference_client.cpp`
 
