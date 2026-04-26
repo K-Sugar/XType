@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>XType — Settings</title>
+<link rel="stylesheet" href="prototype.css?v=4" />
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="proto-primitives.jsx"></script>
+<script type="text/babel" src="proto-pages.jsx"></script>
+
+<script type="text/babel" data-presets="react">
+// Hooks (useState/useEffect/useRef/useMemo/useCallback) already destructured to globals in proto-primitives.jsx
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "purpleHue": 288,
+  "windowOpacity": 78,
+  "grain": 18
+}/*EDITMODE-END*/;
+
+const NAV = [
+  { id: 'general',  label: 'General',         icon: 'general' },
+  { id: 'person',   label: 'Personalisation', icon: 'person' },
+  { id: 'block',    label: 'Block list',      icon: 'block' },
+  { id: 'apps',     label: 'Per-app',         icon: 'apps' },
+  { id: 'model',    label: 'Model',           icon: 'cpu' },
+  { id: 'about',    label: 'About',           icon: 'about' },
+];
+
+const ACTIVE_MODEL_NAMES = {
+  qwen3: 'Qwen3-1.7B',
+  phi35: 'Phi-3.5-mini',
+  l32: 'Llama-3.2-3B',
+  g2: 'Gemma-2B',
+};
+
+const INITIAL_STATE = {
+  enabled: true,
+  trigger: 'pause',
+  delay: 350,
+  maxLen: 12,
+  acceptKey: 'Tab',
+  partial: true,
+  dismissEsc: true,
+  learn: true,
+  voice: 70,
+  forget: false,
+  blockedApps: ['pwd', '1pw', 'kpx'],
+  blockedPhrases: ['Dear hiring manager,', '[REDACTED EMAIL]', '/home/user/secrets'],
+  apps: {
+    kate: { on: true, mode: 'Code-aware', len: 24 },
+    tb: { on: true, mode: 'Email tone', len: 18 },
+    kons: { on: false, mode: 'Off', len: 8 },
+    firefox: { on: true, mode: 'Default', len: 12 },
+    discord: { on: true, mode: 'Casual', len: 10 },
+  },
+  activeModel: 'qwen3',
+  quant: 'Q4',
+  ctx: 2048,
+  threads: 6,
+};
+
+function App() {
+  const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const [page, setPage] = useState('general');
+  const [s, setS] = useState(INITIAL_STATE);
+  const [toastMsg, setToastMsg] = useState(null);
+  const [modal, setModal] = useState(null);
+  const [cpuPct, setCpuPct] = useState(18);
+  const [ramGb, setRamGb] = useState(1.4);
+
+  // Live-ish CPU/RAM ticker
+  useEffect(() => {
+    const t = setInterval(() => {
+      setCpuPct(p => Math.max(8, Math.min(42, p + (Math.random() - 0.5) * 8)) | 0);
+      setRamGb(r => +(Math.max(0.9, Math.min(2.4, r + (Math.random() - 0.5) * 0.15))).toFixed(1));
+    }, 1500);
+    return () => clearInterval(t);
+  }, []);
+  const [logs, setLogs] = useState([
+    { text: '[12:04:31] engine: ready (qwen3-1.7b-q4)' },
+    { text: '[12:04:33] fcitx: connected · wayland' },
+    { text: '[12:08:14] suggest accepted: "...the meeting tomorrow."', kind: 'accent' },
+    { text: '[12:09:02] context: kate · code-aware' },
+    { text: '[12:11:47] suggest rejected · timeout 800ms' },
+    { text: '[12:14:03] style-learn: +1 sentence (n=2,481)' },
+  ]);
+
+  const set = useCallback((key, value) => setS(prev => ({ ...prev, [key]: value })), []);
+
+  // Apply tweaks live
+  useEffect(() => {
+    const r = document.documentElement.style;
+    r.setProperty('--hue', tweaks.purpleHue);
+    r.setProperty('--bg-alpha', tweaks.windowOpacity / 100);
+    r.setProperty('--grain', tweaks.grain / 100);
+  }, [tweaks]);
+
+  // Toast auto-dismiss
+  useEffect(() => {
+    if (!toastMsg) return;
+    const t = setTimeout(() => setToastMsg(null), 1800);
+    return () => clearTimeout(t);
+  }, [toastMsg]);
+
+  // Periodic log ticks for liveness
+  useEffect(() => {
+    const t = setInterval(() => {
+      const now = new Date();
+      const hh = String(now.getHours()).padStart(2, '0');
+      const mm = String(now.getMinutes()).padStart(2, '0');
+      const ss = String(now.getSeconds()).padStart(2, '0');
+      const samples = [
+        { text: `[${hh}:${mm}:${ss}] suggest generated · 12 tok · 118ms` },
+        { text: `[${hh}:${mm}:${ss}] suggest accepted · "tomorrow afternoon"`, kind: 'accent' },
+        { text: `[${hh}:${mm}:${ss}] context: thunderbird · email tone` },
+        { text: `[${hh}:${mm}:${ss}] suggest rejected · user kept typing` },
+      ];
+      setLogs(prev => [...prev.slice(-30), samples[Math.floor(Math.random() * samples.length)]]);
+    }, 4500);
+    return () => clearInterval(t);
+  }, []);
+
+  const toast = (msg) => setToastMsg(msg);
+  const openModal = (cfg) => setModal(cfg);
+
+  const renderPage = () => {
+    switch(page) {
+      case 'general': return <PageGeneral s={s} set={set} demoPaused={!!modal} />;
+      case 'person':  return <PagePersonalisation s={s} set={set} />;
+      case 'block':   return <PageBlockList s={s} set={set} toast={toast} />;
+      case 'apps':    return <PagePerApp s={s} set={set} />;
+      case 'model':   return <PageModel s={s} set={set} openModal={openModal} toast={toast} />;
+      case 'about':   return <PageAbout logs={logs} />;
+    }
+  };
+
+  return (
+    <>
+      <div className="window">
+        <div className="titlebar">
+          <div className="titlebar-status">
+            <span className="engine-dot" style={{ opacity: s.enabled ? 1 : 0.3 }}></span>
+            <span>{s.enabled ? 'ready' : 'paused'}</span>
+          </div>
+          <span className="titlebar-title">XType — Settings</span>
+          <div className="win-controls">
+            <div className="win-btn" title="Minimize">
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"><line x1="1.5" y1="5" x2="8.5" y2="5"/></svg>
+            </div>
+            <div className="win-btn" title="Maximize">
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.2"><rect x="1.5" y="1.5" width="7" height="7" rx="0.5"/></svg>
+            </div>
+            <div className="win-btn close" title="Close">
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"><line x1="2" y1="2" x2="8" y2="8"/><line x1="8" y1="2" x2="2" y2="8"/></svg>
+            </div>
+          </div>
+        </div>
+        <div className="app">
+          <nav className="sidebar">
+            <div className="brand">
+              <div className="brand-mark"></div>
+              <div className="col">
+                <span className="brand-name">XType</span>
+                <span className="brand-ver">v0.4.2</span>
+              </div>
+            </div>
+            {NAV.map(n => (
+              <div key={n.id} className={`nav-item ${page === n.id ? 'active' : ''}`} onClick={() => setPage(n.id)}>
+                {ICONS[n.icon]}
+                <span>{n.label}</span>
+              </div>
+            ))}
+            <div className="sidebar-spacer"></div>
+            <div className="sidebar-status">
+              <div className="status-row">
+                <span className="status-label">Model</span>
+                <span className="model-pill">{ACTIVE_MODEL_NAMES[s.activeModel] || s.activeModel}</span>
+              </div>
+              <div className="status-row">
+                <span className="status-label">CPU</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, marginLeft: 10 }}>
+                  <div className="mini-bar"><div className="mini-fill" style={{ width: `${cpuPct}%` }}></div></div>
+                  <span className="status-value" style={{ minWidth: 28, textAlign: 'right' }}>{cpuPct}%</span>
+                </div>
+              </div>
+              <div className="status-row">
+                <span className="status-label">RAM</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, marginLeft: 10 }}>
+                  <div className="mini-bar"><div className="mini-fill" style={{ width: `${(ramGb / 4) * 100}%` }}></div></div>
+                  <span className="status-value" style={{ minWidth: 44, textAlign: 'right' }}>{ramGb.toFixed(1)} GB</span>
+                </div>
+              </div>
+              <div className="engine-line">
+                <span className="engine-dot" style={{ opacity: s.enabled ? 1 : 0.3 }}></span>
+                <span style={{ fontSize: 11, color: 'var(--ink-65)' }}>{s.enabled ? 'engine running' : 'engine paused'}</span>
+              </div>
+            </div>
+          </nav>
+          <main className="content" key={page}>
+            {renderPage()}
+          </main>
+        </div>
+      </div>
+
+      {toastMsg && (
+        <div className="toast-wrap">
+          <div className="toast">
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--purple-soft)' }}></span>
+            {toastMsg}
+          </div>
+        </div>
+      )}
+
+      {modal && (
+        <div className="modal-bg" onClick={() => setModal(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h2 className="modal-title">{modal.title}</h2>
+            <p className="modal-desc">{modal.desc}</p>
+            <div className="modal-actions">
+              <button className="btn ghost" onClick={() => setModal(null)}>Cancel</button>
+              <button className="btn primary" onClick={() => { modal.confirm(); setModal(null); }}>{modal.confirmLabel || 'Confirm'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <TweaksPanel title="Tweaks">
+        <TweakSection title="Surface">
+          <TweakSlider label="Window opacity" min={50} max={95} step={1} value={tweaks.windowOpacity} onChange={v => setTweak('windowOpacity', v)} />
+          <TweakSlider label="Grain intensity" min={0} max={40} step={1} value={tweaks.grain} onChange={v => setTweak('grain', v)} />
+        </TweakSection>
+        <TweakSection title="Accent">
+          <TweakSlider label="Purple hue" min={260} max={330} step={1} value={tweaks.purpleHue} onChange={v => setTweak('purpleHue', v)} />
+          <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+            {[270, 285, 288, 300, 320].map(h => (
+              <div key={h} onClick={() => setTweak('purpleHue', h)} style={{
+                width: 24, height: 24, borderRadius: 6, cursor: 'pointer',
+                background: `oklch(0.6 0.17 ${h})`,
+                outline: tweaks.purpleHue === h ? '2px solid white' : '1px solid rgba(255,255,255,0.2)',
+                outlineOffset: 1,
+              }}></div>
+            ))}
+          </div>
+        </TweakSection>
+      </TweaksPanel>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
