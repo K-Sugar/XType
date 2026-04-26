@@ -139,6 +139,15 @@ void CorpusCollector::flushLocked(std::deque<std::string>& drained) {
         out.write(line.data(), static_cast<std::streamsize>(line.size()));
         out.put('\n');
     }
+    out.flush();
+    if (_log) {
+        std::error_code ec;
+        auto sz = std::filesystem::file_size(_path, ec);
+        std::string msg = "flush: " + std::to_string(drained.size()) +
+                          " entries written, file=" +
+                          (ec ? std::string("?") : std::to_string(sz)) + " bytes";
+        _log(std::move(msg));
+    }
 }
 
 void CorpusCollector::rotateIfNeeded() {
@@ -152,4 +161,8 @@ void CorpusCollector::rotateIfNeeded() {
     rotated += ".1";
     std::filesystem::rename(_path, rotated, ec);
     // Next flush re-creates _path via ofstream(append).
+    if (!ec && _log) {
+        _log("rotate: " + _path.filename().string() + " -> " +
+             rotated.filename().string() + " (was " + std::to_string(sz) + " bytes)");
+    }
 }

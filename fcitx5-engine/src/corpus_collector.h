@@ -4,6 +4,7 @@
 #include <condition_variable>
 #include <deque>
 #include <filesystem>
+#include <functional>
 #include <mutex>
 #include <string>
 #include <string_view>
@@ -33,6 +34,13 @@ public:
     // True if HOME could not be resolved or path is unusable; record() is a no-op.
     bool disabled() const { return _disabled; }
 
+    // Optional log sink. Invoked from the BACKGROUND flush thread, so the
+    // engine-side wiring must marshal back to the main thread before touching
+    // any non-thread-safe loggers. Set after construction; thread-safe to set
+    // exactly once before the collector starts seeing traffic.
+    using LogFn = std::function<void(std::string)>;
+    void setLogSink(LogFn fn) { _log = std::move(fn); }
+
 private:
     void run();
     void flushLocked(std::deque<std::string>& drained);
@@ -48,6 +56,7 @@ private:
     std::deque<std::string> _queue;
     std::atomic<bool>       _shutdown{false};
     std::thread             _thread;
+    LogFn                   _log;
 
     static constexpr size_t kQueueCap     = 1000;
     static constexpr size_t kEagerFlushAt = 100;

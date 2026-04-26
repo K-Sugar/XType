@@ -49,7 +49,33 @@ XTypeEngine::XTypeEngine(fcitx::AddonManager *manager)
     : _instance(manager->instance()),
       _inference(_cfg.inference)
 {
+    // Observability env reads (once, on the main thread).
+    {
+        const char* v = std::getenv("XTYPE_DEBUG_VERBOSE");
+        if (v && *v && v[0] != '0') _debugVerbose = true;
+        // Sentinel file fallback: ~/.local/share/xtype/.debug_verbose
+        if (!_debugVerbose) {
+            auto sentinel = path_utils::expandTilde("~/.local/share/xtype/.debug_verbose");
+            std::error_code ec;
+            if (std::filesystem::exists(sentinel, ec)) _debugVerbose = true;
+        }
+    }
+    {
+        const char* r = std::getenv("XTYPE_PROFILE_REFRESH_SEC");
+        if (r && *r) {
+            int n = std::atoi(r);
+            if (n >= 30) _profileRefreshSec = n;
+        } else {
+            _profileRefreshSec = kProfileRefreshSec;
+        }
+    }
+
     dbg("XTypeEngine loaded, model=%s", _cfg.inference.model.c_str());
+    if (_debugVerbose)
+        dbg("[debug] verbose mode ON — sentence content will be written to debug.log");
+    if (_profileRefreshSec != kProfileRefreshSec)
+        dbg("[profile] refresh interval override: %d sec", _profileRefreshSec);
+
     if (!_inference.health_check())
         log_warn("Ollama unreachable or model not available — suggestions disabled");
     else
@@ -61,7 +87,14 @@ XTypeEngine::XTypeEngine(fcitx::AddonManager *manager)
             log_warn("corpus collector disabled: HOME unresolved or path invalid");
             _corpus.reset();
         } else {
-            dbg("corpus: enabled, path=%s", _cfg.learning.corpus_path.c_str());
+            dbg("[corpus] enabled path=%s", _cfg.learning.corpus_path.c_str());
+            // Sink runs on the collector's flush thread; marshal to main before dbg().
+            _corpus->setLogSink([this](std::string msg) {
+                _instance->eventDispatcher().schedule(
+                    [m = std::move(msg)]() mutable {
+                        dbg("[corpus] %s", m.c_str());
+                    });
+            });
         }
 
         // Resolve absolute corpus + profile paths once; both worker and isStale need them.
@@ -73,7 +106,7 @@ XTypeEngine::XTypeEngine(fcitx::AddonManager *manager)
             armProfileRefreshTimer();
         }
     } else {
-        dbg("corpus: disabled (opt-in; edit config.h LearningConfig::enabled to enable)");
+        dbg("[corpus] disabled (opt-in; edit config.h LearningConfig::enabled to enable)");
     }
 }
 
@@ -364,7 +397,13 @@ bool XTypeEngine::isBlocked(const std::string &program) const {
 
 void XTypeEngine::harvestSentence(const std::string &program) {
     if (!_corpus) { _userTypedSinceLastTerminator.clear(); return; }
-    if (isBlocked(program) || CorpusCollector::isHardBlocked(program)) {
+    if (CorpusCollector::isHardBlocked(program)) {
+        dbg("[harvest] drop hard-blocked app=%s", program.c_str());
+        _userTypedSinceLastTerminator.clear();
+        return;
+    }
+    if (isBlocked(program)) {
+        dbg("[harvest] drop blocked app=%s", program.c_str());
         _userTypedSinceLastTerminator.clear();
         return;
     }
@@ -372,8 +411,17 @@ void XTypeEngine::harvestSentence(const std::string &program) {
     s.swap(_userTypedSinceLastTerminator);
     while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front())))
         s.erase(0, 1);
-    if (static_cast<int>(s.size()) >= _cfg.learning.min_sentence_chars)
-        _corpus->record(std::move(s));
+    if (static_cast<int>(s.size()) < _cfg.learning.min_sentence_chars) {
+        dbg("[harvest] drop too-short len=%zu", s.size());
+        return;
+    }
+    dbg("[harvest] ok len=%zu", s.size());
+    if (_debugVerbose) {
+        // Cap snippet to first 60 chars so very long sentences don't blow up the log.
+        std::string snip = s.size() > 60 ? s.substr(0, 60) + "..." : s;
+        dbg("[harvest] verbose content='%s'", snip.c_str());
+    }
+    _corpus->record(std::move(s));
 }
 
 // ── Personalization (Session 17) ──────────────────────────────────────────────
@@ -388,14 +436,19 @@ void XTypeEngine::applyPrompt() {
     auto prompt = buildSystemPrompt(in, &truncated);
     if (truncated)
         log_warn("system prompt truncated to fit 2000-char budget");
-    dbg("prompt set: %zu chars, exemplars=%zu",
-        prompt.size(),
-        _profile ? _profile->exemplars().size() : (size_t)0);
+    size_t exCount = _profile ? _profile->exemplars().size() : (size_t)0;
+    dbg("[prompt] set %zu chars exemplars=%zu truncated=%d",
+        prompt.size(), exCount, truncated ? 1 : 0);
     _inference.set_system_prompt(std::move(prompt));
 }
 
 void XTypeEngine::kickProfileLoad() {
-    if (_profileLoading.exchange(true)) return;  // already running
+    if (_profileLoading.exchange(true)) {
+        // Marshal to main thread for thread-safe dbg.
+        _instance->eventDispatcher().schedule(
+            []{ dbg("[profile] refresh: skipped (still loading)"); });
+        return;
+    }
 
     if (_profileWorker && _profileWorker->joinable())
         _profileWorker->join();
@@ -405,14 +458,34 @@ void XTypeEngine::kickProfileLoad() {
 
     _profileWorker.emplace([this, corpusPath, profilePath]() {
         StyleProfile sp = StyleProfile::deserialize(profilePath);
-        bool needRebuild = sp.exemplars().empty() ||
-                           StyleProfile::isStale(corpusPath, profilePath);
+        bool stale = StyleProfile::isStale(corpusPath, profilePath);
+        bool needRebuild = sp.exemplars().empty() || stale;
+        std::string reason;
+        if (sp.exemplars().empty())               reason = "missing-or-empty";
+        else if (stale)                           reason = "stale";
+        else                                      reason = "none";
+
         if (needRebuild) {
             sp = StyleProfile{};
             sp.loadFromCorpus(corpusPath);
-            if (!sp.exemplars().empty())
+            if (!sp.exemplars().empty()) {
                 sp.serialize(profilePath);
+                _instance->eventDispatcher().schedule(
+                    [path = profilePath]{ dbg("[profile] serialize: %s", path.c_str()); });
+            }
         }
+
+        size_t exCount = sp.exemplars().size();
+        int    avg     = sp.avgSentenceLen();
+        int    cnt     = sp.sentenceCount();
+        _instance->eventDispatcher().schedule(
+            [reason, needRebuild, exCount, avg, cnt]{
+                dbg("[profile] stale=%s reason=%s",
+                    needRebuild ? "true" : "false", reason.c_str());
+                dbg("[profile] load: exemplars=%zu avg=%d count=%d",
+                    exCount, avg, cnt);
+            });
+
         _instance->eventDispatcher().schedule(
             [this, sp = std::move(sp)]() mutable {
                 _profile = std::make_unique<StyleProfile>(std::move(sp));
@@ -424,10 +497,11 @@ void XTypeEngine::kickProfileLoad() {
 
 void XTypeEngine::armProfileRefreshTimer() {
     uint64_t fireUs = fcitx::now(CLOCK_MONOTONIC) +
-                      static_cast<uint64_t>(kProfileRefreshSec) * 1000000ull;
+                      static_cast<uint64_t>(_profileRefreshSec) * 1000000ull;
     _profileRefreshTimer = _instance->eventLoop().addTimeEvent(
         CLOCK_MONOTONIC, fireUs, /*accuracy=*/0,
         [this](fcitx::EventSourceTime *, uint64_t) {
+            dbg("[profile] refresh: timer fired");
             kickProfileLoad();
             armProfileRefreshTimer();
             return false;  // one-shot; we re-arm above

@@ -1,9 +1,11 @@
 #include "inference_client.h"
 
 #include <curl/curl.h>
+#include <algorithm>
 #include <charconv>
 #include <cstdarg>
 #include <cstdio>
+#include <cstdlib>
 #include <string_view>
 
 static FILE *ic_logfile() {
@@ -171,8 +173,17 @@ InferenceClient::InferenceClient(InferenceConfig cfg)
 
 void InferenceClient::set_system_prompt(std::string s) {
     std::lock_guard<std::mutex> lk(_mutex);
-    if (s == _system_prompt) return;  // no-op fast path
+    if (s == _system_prompt) {
+        iclog("[prompt] set: no-op (unchanged, %zu chars)", _system_prompt.size());
+        return;
+    }
+    size_t was = _system_prompt.size();
     _system_prompt = std::move(s);
+    iclog("[prompt] set %zu chars (was %zu)", _system_prompt.size(), was);
+    if (const char* v = std::getenv("XTYPE_DEBUG_VERBOSE"); v && *v && v[0] != '0') {
+        std::string head = _system_prompt.substr(0, std::min<size_t>(200, _system_prompt.size()));
+        iclog("[prompt] verbose head='%s'", head.c_str());
+    }
 }
 
 std::string_view InferenceClient::base_system_prompt() {

@@ -69,7 +69,14 @@ private:
     std::string                              _corpusPathExpanded;
     std::string                              _profilePathExpanded;
 
+    // Observability (Session 17.5). _debugVerbose is set once at engine load
+    // from XTYPE_DEBUG_VERBOSE env or the sentinel file
+    // ~/.local/share/xtype/.debug_verbose; _profileRefreshSec from
+    // XTYPE_PROFILE_REFRESH_SEC (clamped >= 30).
+    bool                                     _debugVerbose{false};
+    int                                      _profileRefreshSec{300};
+
     static constexpr size_t kUserBufCap        = 2048;
-    static constexpr int    kProfileRefreshSec = 300;   // 5 min
+    static constexpr int    kProfileRefreshSec = 300;   // 5 min default
     static constexpr size_t kPromptBudget      = 2000;
 };

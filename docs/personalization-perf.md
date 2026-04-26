@@ -67,3 +67,11 @@ table below.
 | Date | Hardware | Model | Variant | TTFT p50 | TTFT p95 | Notes |
 |---|---|---|---|---|---|---|
 | 2026-04-26 | dev box | qwen2.5:1.5b | base only | 110 ms | 110 ms | reference baseline |
+
+## Related
+
+End-to-end manual verification of the personalization layers (corpus
+collection, profile build, prompt assembly, refresh timer, CLI tools)
+lives in [`testing-personalization.md`](testing-personalization.md). Run
+that matrix when you change any of `corpus_collector`, `style_profile`,
+`prompt_builder`, or the engine's profile-load paths.
