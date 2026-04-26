@@ -17,13 +17,20 @@
 #include "config.h"
 #include "context_buffer.h"
 #include "corpus_collector.h"
+#include "engine_metrics.h"
 #include "inference_client.h"
+#include "phrase_blocklist.h"
+#include "recent_events.h"
 #include "style_profile.h"
 
 class XTypeEngine : public fcitx::InputMethodEngineV2 {
 public:
     explicit XTypeEngine(fcitx::AddonManager *manager);
     ~XTypeEngine() override;
+
+    const EngineMetrics&      metrics()      const noexcept { return _metrics; }
+    const RecentEventsRing&   recentEvents() const noexcept { return _recent; }
+    const XTypeConfig&        config()       const noexcept { return _cfg; }
 
     void keyEvent(const fcitx::InputMethodEntry &entry,
                   fcitx::KeyEvent &event) override;
@@ -55,6 +62,9 @@ private:
     XTypeConfig                              _cfg;
     ContextBuffer                            _ctx;
     InferenceClient                          _inference;
+    EngineMetrics                            _metrics;
+    RecentEventsRing                         _recent;
+    PhraseBlocklist                          _phraseBlock;
     std::unique_ptr<CorpusCollector>         _corpus;
     std::string                              _userTypedSinceLastTerminator;
     std::unique_ptr<fcitx::EventSourceTime>  _debounceTimer;

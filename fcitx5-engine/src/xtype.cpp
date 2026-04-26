@@ -25,7 +25,12 @@
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 static FILE *dbg_file() {
-    static FILE *f = std::fopen("/home/saint/Desktop/XType/fcitx5-engine/debug.log", "w");  // truncate on each engine load
+    static FILE *f = []() -> FILE* {
+        auto dir = path_utils::expandTilde("~/.local/share/xtype");
+        std::error_code ec;
+        std::filesystem::create_directories(dir, ec);
+        return std::fopen((dir / "fcitx5.log").c_str(), "a");
+    }();
     return f;
 }
 static void dbg(const char *fmt, ...) {
@@ -70,6 +75,7 @@ XTypeEngine::XTypeEngine(fcitx::AddonManager *manager)
         }
     }
 
+    _phraseBlock.load(_cfg.behaviour.blocked_phrases);
     dbg("XTypeEngine loaded, model=%s", _cfg.inference.model.c_str());
     if (_debugVerbose)
         dbg("[debug] verbose mode ON — sentence content will be written to debug.log");
@@ -175,6 +181,9 @@ void XTypeEngine::keyEvent(const fcitx::InputMethodEntry &,
     // Blocklisted apps pass everything through.
     if (isBlocked(ic->program())) return;
 
+    // Phrase blocklist stub (always false until future session implements matching).
+    if (_phraseBlock.matches(_ctx.contextText())) return;
+
     // Modifier combos (Ctrl / Alt / Super) pass through.
     auto states = event.key().states();
     if (states.testAny(fcitx::KeyStates{fcitx::KeyState::Ctrl,
@@ -193,6 +202,8 @@ void XTypeEngine::keyEvent(const fcitx::InputMethodEntry &,
         std::string committed = acceptAll ? _ctx.acceptAll() : _ctx.acceptNextWord();
         ic->commitString(committed);
         updatePreedit(ic);
+        ++_metrics.suggestions_accepted;
+        _metrics.chars_accepted += committed.size();
         event.filterAndAccept();
         return;
     }
@@ -281,6 +292,7 @@ void XTypeEngine::requestInference(
                          static_cast<size_t>(_cfg.inference.context_window));
 
     ++_gen;
+    ++_metrics.suggestions_generated;
     const uint64_t myGen = _gen;
 
     dbg("requestInference ctx='%.40s...'", ctx.c_str());
