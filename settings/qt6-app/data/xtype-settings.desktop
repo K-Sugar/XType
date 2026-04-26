@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=XType Settings
+GenericName=Input Method Settings
+Comment=Configure the XType AI text prediction engine
+Exec=xtype-settings
+Icon=xtype
+Categories=Settings;Accessibility;
+Keywords=input;method;ai;typing;prediction;
+StartupNotify=true
+StartupWMClass=xtype-settings
