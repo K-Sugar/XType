@@ -146,7 +146,7 @@
 
 ---
 
-### [ ] Session 16 — Style profile extraction
+### [x] Session 16 — Style profile extraction
 
 **Files:** `fcitx5-engine/src/style_profile.h`, `fcitx5-engine/src/style_profile.cpp`, `fcitx5-engine/tests/test_style_profile.cpp`
 

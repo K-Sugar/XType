@@ -1,7 +1,7 @@
 # XType — Claude Code Context
 
 ## Current Phase
-Phase D → Session 16
+Phase D → Session 17
 
 ## Session workflow
 1. Read PLAN.md, find the first session not marked [x]

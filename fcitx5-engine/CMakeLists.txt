@@ -22,6 +22,11 @@ add_library(corpus_collector_obj OBJECT src/corpus_collector.cpp)
 target_include_directories(corpus_collector_obj PUBLIC src)
 set_target_properties(corpus_collector_obj PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
+# style_profile compiled once; consumed by tests this session, by the addon in Session 17
+add_library(style_profile_obj OBJECT src/style_profile.cpp)
+target_include_directories(style_profile_obj PUBLIC src)
+set_target_properties(style_profile_obj PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 add_library(xtype-fcitx5 SHARED
     src/xtype.cpp
     src/inference_client.cpp

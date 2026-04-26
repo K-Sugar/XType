@@ -15,3 +15,11 @@ target_link_libraries(test_corpus_collector PRIVATE
 )
 
 catch_discover_tests(test_corpus_collector)
+
+add_executable(test_style_profile test_style_profile.cpp)
+target_link_libraries(test_style_profile PRIVATE
+    style_profile_obj
+    Catch2::Catch2WithMain
+)
+
+catch_discover_tests(test_style_profile)
