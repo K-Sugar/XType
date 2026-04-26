@@ -95,7 +95,7 @@
 > samples, inject them as few-shot examples into the system prompt. **No fine-tuning, no cloud,
 > no telemetry.** The corpus is local-only and opt-in.
 
-### [ ] Session 15 — Writing corpus collector
+### [x] Session 15 — Writing corpus collector
 
 **Files:** `fcitx5-engine/src/corpus_collector.h`, `fcitx5-engine/src/corpus_collector.cpp`, `fcitx5-engine/src/config.h` (extend), `fcitx5-engine/src/xtype.cpp` (wire in)
 

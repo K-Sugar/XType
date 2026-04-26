@@ -17,6 +17,11 @@ endif()
 add_library(context_buffer_obj OBJECT src/context_buffer.cpp)
 target_include_directories(context_buffer_obj PUBLIC src)
 
+# corpus_collector compiled once; reused by the addon and the test binary
+add_library(corpus_collector_obj OBJECT src/corpus_collector.cpp)
+target_include_directories(corpus_collector_obj PUBLIC src)
+set_target_properties(corpus_collector_obj PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 add_library(xtype-fcitx5 SHARED
     src/xtype.cpp
     src/inference_client.cpp
@@ -24,6 +29,7 @@ add_library(xtype-fcitx5 SHARED
 target_include_directories(xtype-fcitx5 PRIVATE src)
 target_link_libraries(xtype-fcitx5 PRIVATE
     context_buffer_obj
+    corpus_collector_obj
     Fcitx5::Core
     CURL::libcurl
 )

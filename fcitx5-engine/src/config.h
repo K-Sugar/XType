@@ -18,10 +18,22 @@ struct InferenceConfig {
 struct BehaviourConfig {
     bool                     tab_accepts_word      = true;
     bool                     passthrough_terminals = true;
-    std::vector<std::string> blocklist_apps        = {"konsole", "alacritty"};
+    std::vector<std::string> blocklist_apps        = {
+        "konsole", "alacritty",
+        "keepassxc", "1password", "bitwarden", "gnome-keyring", "seahorse"
+    };
+};
+
+struct LearningConfig {
+    bool        enabled            = false;  // OPT-IN: default off
+    std::string corpus_path        = "~/.local/share/xtype/corpus.txt";
+    int         flush_interval_sec = 60;
+    int         max_corpus_mb      = 50;
+    int         min_sentence_chars = 12;
 };
 
 struct XTypeConfig {
     InferenceConfig inference;
     BehaviourConfig behaviour;
+    LearningConfig  learning;
 };

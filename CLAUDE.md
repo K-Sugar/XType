@@ -1,12 +1,7 @@
 # XType — Claude Code Context
 
 ## Current Phase
-Phase B → Session 12: XTypeEngine C++ core
-
-See Summary.md for full project context and architecture.
-See PLAN.md for the session-by-session plan.
-
-
+Phase D → Session 16
 
 ## Session workflow
 1. Read PLAN.md, find the first session not marked [x]
@@ -15,10 +10,10 @@ See PLAN.md for the session-by-session plan.
 3. Plan — summarise your approach; pause before touching more than 3 files
 4. Code, run tests, fix failures
 5. Self-critique: re-read implementation against session objectives + PLAN.md gotchas
-6. Mark session [x], commit with exact message from PLAN.md, push
+6. Before committing, Mark session [x], then commit with message from PLAN.md, push
 
 ## Commits
-- One commit per session, exact message from PLAN.md with additions if relevant or applicable
+- One commit per session, message from PLAN.md with additions if relevant or applicable
 - Never commit with failing tests
 
 ## Hard rules

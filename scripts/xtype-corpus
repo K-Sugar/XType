@@ -1,0 +1,91 @@
+#!/usr/bin/env python3
+"""xtype-corpus — inspect or wipe the local writing corpus.
+
+Usage:
+    xtype-corpus stats
+    xtype-corpus wipe
+"""
+import argparse
+import os
+import sys
+from pathlib import Path
+
+CORPUS_DIR = Path(os.path.expanduser("~/.local/share/xtype"))
+CORPUS_FILE = CORPUS_DIR / "corpus.txt"
+PROFILE_FILE = CORPUS_DIR / "style_profile.json"
+
+
+def corpus_files():
+    if not CORPUS_DIR.exists():
+        return []
+    return sorted(p for p in CORPUS_DIR.iterdir()
+                  if p.name == "corpus.txt" or p.name.startswith("corpus.txt."))
+
+
+def cmd_stats(_args):
+    files = corpus_files()
+    if not files:
+        print(f"no corpus found at {CORPUS_DIR}")
+        return 0
+    total_lines = 0
+    total_words = 0
+    total_bytes = 0
+    for f in files:
+        try:
+            data = f.read_bytes()
+        except FileNotFoundError:
+            continue  # rotation race; skip
+        total_bytes += len(data)
+        text = data.decode("utf-8", errors="replace")
+        lines = [ln for ln in text.split("\n") if ln.strip()]
+        total_lines += len(lines)
+        total_words += sum(len(ln.split()) for ln in lines)
+    print(f"path:  {CORPUS_DIR}")
+    print(f"files: {', '.join(p.name for p in files)}")
+    print(f"lines: {total_lines}")
+    print(f"words: {total_words}")
+    print(f"bytes: {total_bytes}")
+    return 0
+
+
+def cmd_wipe(_args):
+    files = corpus_files()
+    profile_present = PROFILE_FILE.exists()
+    if not files and not profile_present:
+        print(f"nothing to wipe under {CORPUS_DIR}")
+        return 0
+
+    print("This will permanently delete:")
+    for f in files:
+        print(f"  {f}")
+    if profile_present:
+        print(f"  {PROFILE_FILE}")
+    answer = input("Type 'wipe' to confirm: ").strip()
+    if answer != "wipe":
+        print("aborted")
+        return 1
+
+    removed = 0
+    for f in files + ([PROFILE_FILE] if profile_present else []):
+        try:
+            f.unlink()
+            removed += 1
+        except FileNotFoundError:
+            pass
+    print(f"removed {removed} file(s)")
+    return 0
+
+
+def main():
+    p = argparse.ArgumentParser(prog="xtype-corpus", description=__doc__)
+    sub = p.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("stats", help="print corpus line/word/byte counts")
+    sub.add_parser("wipe", help="delete corpus + rotated backups + style profile")
+    args = p.parse_args()
+
+    handlers = {"stats": cmd_stats, "wipe": cmd_wipe}
+    return handlers[args.cmd](args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

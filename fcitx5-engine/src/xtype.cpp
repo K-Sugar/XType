@@ -49,6 +49,18 @@ XTypeEngine::XTypeEngine(fcitx::AddonManager *manager)
         log_warn("Ollama unreachable or model not available — suggestions disabled");
     else
         dbg("health_check OK");
+
+    if (_cfg.learning.enabled && !_cfg.learning.corpus_path.empty()) {
+        _corpus = std::make_unique<CorpusCollector>(_cfg.learning);
+        if (_corpus->disabled()) {
+            log_warn("corpus collector disabled: HOME unresolved or path invalid");
+            _corpus.reset();
+        } else {
+            dbg("corpus: enabled, path=%s", _cfg.learning.corpus_path.c_str());
+        }
+    } else {
+        dbg("corpus: disabled (opt-in; edit config.h LearningConfig::enabled to enable)");
+    }
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
@@ -75,6 +87,13 @@ void XTypeEngine::deactivate(const fcitx::InputMethodEntry &,
     // effect. Called unconditionally so Chromium always commits empty rather than ghost text.
     ic->commitString("");
     clearPreedit(ic);
+    if (_corpus &&
+        static_cast<int>(_userTypedSinceLastTerminator.size()) >=
+            _cfg.learning.min_sentence_chars) {
+        harvestSentence(ic->program());
+    } else {
+        _userTypedSinceLastTerminator.clear();
+    }
     _ctx.dismiss();
     resetInferenceOnly(); // cancel debounce + inference; _ctx typed text preserved for same-app cycling
 }
@@ -141,6 +160,8 @@ void XTypeEngine::keyEvent(const fcitx::InputMethodEntry &,
             invalidate();
             updatePreedit(ic);
         }
+        if (_corpus && !_userTypedSinceLastTerminator.empty())
+            harvestSentence(ic->program());
         return;
     }
 
@@ -152,6 +173,8 @@ void XTypeEngine::keyEvent(const fcitx::InputMethodEntry &,
             event.filterAndAccept();
         } else {
             _ctx.backspace();
+            if (!_userTypedSinceLastTerminator.empty())
+                _userTypedSinceLastTerminator.pop_back();
             _debounceTimer.reset();
         }
         return;
@@ -164,7 +187,15 @@ void XTypeEngine::keyEvent(const fcitx::InputMethodEntry &,
             ic->program().c_str(), _ctx.contextText().size());
         invalidate();
         updatePreedit(ic);
-        _ctx.appendChar(static_cast<char>(sym));
+        const char ch = static_cast<char>(sym);
+        _ctx.appendChar(ch);
+
+        // User-typed-only buffer for corpus harvest (excludes AI accept paths).
+        if (_userTypedSinceLastTerminator.size() >= kUserBufCap)
+            _userTypedSinceLastTerminator.erase(0, kUserBufCap / 2);
+        _userTypedSinceLastTerminator.push_back(ch);
+        if (ch == '.' || ch == '!' || ch == '?')
+            harvestSentence(ic->program());
 
         _debounceTimer.reset();
         uint64_t fireUs = fcitx::now(CLOCK_MONOTONIC) +
@@ -289,6 +320,7 @@ void XTypeEngine::resetState(fcitx::InputContext *ic) {
     _inference.cancel();
     ++_gen;
     _ctx.reset();
+    _userTypedSinceLastTerminator.clear();
     clearPreedit(ic);
 }
 
@@ -309,6 +341,20 @@ bool XTypeEngine::isBlocked(const std::string &program) const {
     for (const auto &app : _cfg.behaviour.blocklist_apps)
         if (prog_lower.find(app) != std::string::npos) return true;
     return false;
+}
+
+void XTypeEngine::harvestSentence(const std::string &program) {
+    if (!_corpus) { _userTypedSinceLastTerminator.clear(); return; }
+    if (isBlocked(program) || CorpusCollector::isHardBlocked(program)) {
+        _userTypedSinceLastTerminator.clear();
+        return;
+    }
+    std::string s;
+    s.swap(_userTypedSinceLastTerminator);
+    while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front())))
+        s.erase(0, 1);
+    if (static_cast<int>(s.size()) >= _cfg.learning.min_sentence_chars)
+        _corpus->record(std::move(s));
 }
 
 // ── Addon factory ─────────────────────────────────────────────────────────────

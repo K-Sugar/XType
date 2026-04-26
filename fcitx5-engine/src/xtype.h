@@ -13,6 +13,7 @@
 
 #include "config.h"
 #include "context_buffer.h"
+#include "corpus_collector.h"
 #include "inference_client.h"
 
 class XTypeEngine : public fcitx::InputMethodEngineV2 {
@@ -38,12 +39,17 @@ private:
     void resetInferenceOnly();
     void invalidate();
     bool isBlocked(const std::string &program) const;
+    void harvestSentence(const std::string &program);
 
     fcitx::Instance                         *_instance;
     XTypeConfig                              _cfg;
     ContextBuffer                            _ctx;
     InferenceClient                          _inference;
+    std::unique_ptr<CorpusCollector>         _corpus;
+    std::string                              _userTypedSinceLastTerminator;
     std::unique_ptr<fcitx::EventSourceTime>  _debounceTimer;
     uint64_t                                 _gen{0};
     std::string                              _lastProg;
+
+    static constexpr size_t kUserBufCap = 2048;
 };
