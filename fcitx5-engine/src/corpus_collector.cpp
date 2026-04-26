@@ -4,10 +4,11 @@
 #include <array>
 #include <cctype>
 #include <chrono>
-#include <cstdlib>
 #include <fstream>
 #include <system_error>
 #include <utility>
+
+#include "path_utils.h"
 
 namespace {
 
@@ -20,15 +21,6 @@ std::string toLower(std::string_view s) {
     std::transform(out.begin(), out.end(), out.begin(),
                    [](unsigned char c) { return std::tolower(c); });
     return out;
-}
-
-std::filesystem::path expandTilde(const std::string& in, bool& ok) {
-    ok = true;
-    if (in.empty()) { ok = false; return {}; }
-    if (in.front() != '~') return std::filesystem::path(in);
-    const char* home = std::getenv("HOME");
-    if (!home || !*home) { ok = false; return {}; }
-    return std::filesystem::path(std::string(home) + in.substr(1));
 }
 
 bool hasCodeShape(const std::string& s) {
@@ -62,9 +54,13 @@ std::string trim(std::string s) {
 CorpusCollector::CorpusCollector(LearningConfig cfg)
     : _cfg(std::move(cfg))
 {
-    bool ok = false;
-    _path = expandTilde(_cfg.corpus_path, ok);
-    if (!ok) { _disabled = true; return; }
+    if (_cfg.corpus_path.empty()) { _disabled = true; return; }
+    _path = path_utils::expandTilde(_cfg.corpus_path);
+    // path_utils returns the input as-is if HOME is unresolvable; detect that.
+    if (!_path.empty() && _path.string().front() == '~') {
+        _disabled = true;
+        return;
+    }
 
     std::error_code ec;
     if (!_path.parent_path().empty())

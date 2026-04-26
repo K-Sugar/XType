@@ -6,6 +6,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <thread>
 
 #include "config.h"
@@ -27,6 +28,13 @@ public:
     void cancel();
     bool health_check();  // blocking GET /api/tags
 
+    // Replace the system prompt sent on subsequent requests. Thread-safe.
+    // No-op if equal to the current value.
+    void set_system_prompt(std::string s);
+
+    // The canonical base instruction this client uses by default.
+    static std::string_view base_system_prompt();
+
 private:
     struct Req {
         std::string context;
@@ -41,9 +49,10 @@ private:
 
     InferenceConfig          _cfg;
     std::thread              _thread;
-    std::mutex               _mutex;
+    std::mutex               _mutex;          // also guards _system_prompt
     std::condition_variable  _cv;
     std::optional<Req>       _pending;
+    std::string              _system_prompt;  // guarded by _mutex
     std::atomic<uint64_t>    _gen{0};
     std::atomic<bool>        _shutdown{false};
 };

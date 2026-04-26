@@ -25,11 +25,12 @@ struct BehaviourConfig {
 };
 
 struct LearningConfig {
-    bool        enabled            = false;  // OPT-IN: default off
-    std::string corpus_path        = "~/.local/share/xtype/corpus.txt";
-    int         flush_interval_sec = 60;
-    int         max_corpus_mb      = 50;
-    int         min_sentence_chars = 12;
+    bool        enabled                    = false;  // OPT-IN: default off
+    std::string corpus_path                = "~/.local/share/xtype/corpus.txt";
+    int         flush_interval_sec         = 60;
+    int         max_corpus_mb              = 50;
+    int         min_sentence_chars         = 12;
+    bool        include_examples_in_prompt = true;   // suppress exemplars without disabling collection
 };
 
 struct XTypeConfig {

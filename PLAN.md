@@ -193,7 +193,7 @@
 
 ---
 
-### [ ] Session 17 — Dynamic system prompt assembly
+### [x] Session 17 — Dynamic system prompt assembly
 
 **Files:** `fcitx5-engine/src/inference_client.h` (extend), `fcitx5-engine/src/inference_client.cpp` (modify), `fcitx5-engine/src/xtype.cpp` (compose), `fcitx5-engine/src/xtype.h` (add member)
 

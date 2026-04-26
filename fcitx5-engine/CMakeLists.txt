@@ -17,15 +17,25 @@ endif()
 add_library(context_buffer_obj OBJECT src/context_buffer.cpp)
 target_include_directories(context_buffer_obj PUBLIC src)
 
+# path_utils — small ~ expansion helper, shared across collector/profile/engine
+add_library(path_utils_obj OBJECT src/path_utils.cpp)
+target_include_directories(path_utils_obj PUBLIC src)
+set_target_properties(path_utils_obj PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 # corpus_collector compiled once; reused by the addon and the test binary
 add_library(corpus_collector_obj OBJECT src/corpus_collector.cpp)
 target_include_directories(corpus_collector_obj PUBLIC src)
 set_target_properties(corpus_collector_obj PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-# style_profile compiled once; consumed by tests this session, by the addon in Session 17
+# style_profile compiled once; consumed by the addon and tests
 add_library(style_profile_obj OBJECT src/style_profile.cpp)
 target_include_directories(style_profile_obj PUBLIC src)
 set_target_properties(style_profile_obj PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+# prompt_builder — pure function, consumed by the addon and tests
+add_library(prompt_builder_obj OBJECT src/prompt_builder.cpp)
+target_include_directories(prompt_builder_obj PUBLIC src)
+set_target_properties(prompt_builder_obj PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 add_library(xtype-fcitx5 SHARED
     src/xtype.cpp
@@ -34,7 +44,10 @@ add_library(xtype-fcitx5 SHARED
 target_include_directories(xtype-fcitx5 PRIVATE src)
 target_link_libraries(xtype-fcitx5 PRIVATE
     context_buffer_obj
+    path_utils_obj
     corpus_collector_obj
+    style_profile_obj
+    prompt_builder_obj
     Fcitx5::Core
     CURL::libcurl
 )

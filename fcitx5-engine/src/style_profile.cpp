@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
-#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <map>
@@ -11,6 +10,8 @@
 #include <sstream>
 #include <string_view>
 #include <system_error>
+
+#include "path_utils.h"
 
 namespace {
 
@@ -22,13 +23,6 @@ constexpr int    kMaxStaleScanBytes   = 5 * 1024 * 1024;
 constexpr int    kProfileSchemaVer    = 1;
 
 // ── small utils ──────────────────────────────────────────────────────────────
-
-std::filesystem::path expandTilde(const std::string& in) {
-    if (in.empty() || in.front() != '~') return std::filesystem::path(in);
-    const char* home = std::getenv("HOME");
-    if (!home || !*home) return std::filesystem::path(in);
-    return std::filesystem::path(std::string(home) + in.substr(1));
-}
 
 std::string toLower(std::string_view s) {
     std::string out(s);
@@ -320,7 +314,7 @@ void StyleProfile::loadFromCorpus(const std::string& corpus_path, unsigned seed)
     _count      = 0;
     _lastUpdated = 0;
 
-    std::ifstream in(expandTilde(corpus_path));
+    std::ifstream in(path_utils::expandTilde(corpus_path));
     if (!in) return;
 
     std::vector<std::string> kept;
@@ -366,7 +360,7 @@ std::string StyleProfile::generatePreamble() const {
 }
 
 bool StyleProfile::serialize(const std::string& path) const {
-    auto p = expandTilde(path);
+    auto p = path_utils::expandTilde(path);
     std::error_code ec;
     if (!p.parent_path().empty())
         std::filesystem::create_directories(p.parent_path(), ec);
@@ -399,7 +393,7 @@ bool StyleProfile::serialize(const std::string& path) const {
 
 StyleProfile StyleProfile::deserialize(const std::string& path) {
     StyleProfile sp;
-    std::ifstream in(expandTilde(path));
+    std::ifstream in(path_utils::expandTilde(path));
     if (!in) return sp;
 
     std::stringstream ss;
@@ -427,8 +421,8 @@ bool StyleProfile::isStale(const std::string& corpus_path,
                            const std::string& profile_path,
                            int new_lines_threshold,
                            int min_age_seconds) {
-    auto cp = expandTilde(corpus_path);
-    auto pp = expandTilde(profile_path);
+    auto cp = path_utils::expandTilde(corpus_path);
+    auto pp = path_utils::expandTilde(profile_path);
     std::error_code ec;
     if (!std::filesystem::exists(pp, ec)) return true;
 

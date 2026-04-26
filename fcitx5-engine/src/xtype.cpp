@@ -5,7 +5,9 @@
 #include <cstdarg>
 #include <cstdio>
 #include <ctime>
+#include <filesystem>
 #include <string>
+#include <utility>
 
 #include <fcitx-utils/eventloopinterface.h>
 #include <fcitx-utils/key.h>
@@ -16,6 +18,9 @@
 #include <fcitx/inputpanel.h>
 #include <fcitx/instance.h>
 #include <fcitx/text.h>
+
+#include "path_utils.h"
+#include "prompt_builder.h"
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -58,9 +63,23 @@ XTypeEngine::XTypeEngine(fcitx::AddonManager *manager)
         } else {
             dbg("corpus: enabled, path=%s", _cfg.learning.corpus_path.c_str());
         }
+
+        // Resolve absolute corpus + profile paths once; both worker and isStale need them.
+        auto cp = path_utils::expandTilde(_cfg.learning.corpus_path);
+        if (!cp.empty() && cp.string().front() != '~') {
+            _corpusPathExpanded  = cp.string();
+            _profilePathExpanded = (cp.parent_path() / "style_profile.json").string();
+            kickProfileLoad();
+            armProfileRefreshTimer();
+        }
     } else {
         dbg("corpus: disabled (opt-in; edit config.h LearningConfig::enabled to enable)");
     }
+}
+
+XTypeEngine::~XTypeEngine() {
+    if (_profileWorker && _profileWorker->joinable())
+        _profileWorker->join();
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
@@ -355,6 +374,64 @@ void XTypeEngine::harvestSentence(const std::string &program) {
         s.erase(0, 1);
     if (static_cast<int>(s.size()) >= _cfg.learning.min_sentence_chars)
         _corpus->record(std::move(s));
+}
+
+// ── Personalization (Session 17) ──────────────────────────────────────────────
+
+void XTypeEngine::applyPrompt() {
+    PromptInputs in;
+    in.base            = std::string(InferenceClient::base_system_prompt());
+    in.profile         = _profile.get();
+    in.includeExamples = _cfg.learning.include_examples_in_prompt;
+    in.budgetChars     = kPromptBudget;
+    bool truncated = false;
+    auto prompt = buildSystemPrompt(in, &truncated);
+    if (truncated)
+        log_warn("system prompt truncated to fit 2000-char budget");
+    dbg("prompt set: %zu chars, exemplars=%zu",
+        prompt.size(),
+        _profile ? _profile->exemplars().size() : (size_t)0);
+    _inference.set_system_prompt(std::move(prompt));
+}
+
+void XTypeEngine::kickProfileLoad() {
+    if (_profileLoading.exchange(true)) return;  // already running
+
+    if (_profileWorker && _profileWorker->joinable())
+        _profileWorker->join();
+
+    std::string corpusPath  = _corpusPathExpanded;
+    std::string profilePath = _profilePathExpanded;
+
+    _profileWorker.emplace([this, corpusPath, profilePath]() {
+        StyleProfile sp = StyleProfile::deserialize(profilePath);
+        bool needRebuild = sp.exemplars().empty() ||
+                           StyleProfile::isStale(corpusPath, profilePath);
+        if (needRebuild) {
+            sp = StyleProfile{};
+            sp.loadFromCorpus(corpusPath);
+            if (!sp.exemplars().empty())
+                sp.serialize(profilePath);
+        }
+        _instance->eventDispatcher().schedule(
+            [this, sp = std::move(sp)]() mutable {
+                _profile = std::make_unique<StyleProfile>(std::move(sp));
+                applyPrompt();
+                _profileLoading.store(false);
+            });
+    });
+}
+
+void XTypeEngine::armProfileRefreshTimer() {
+    uint64_t fireUs = fcitx::now(CLOCK_MONOTONIC) +
+                      static_cast<uint64_t>(kProfileRefreshSec) * 1000000ull;
+    _profileRefreshTimer = _instance->eventLoop().addTimeEvent(
+        CLOCK_MONOTONIC, fireUs, /*accuracy=*/0,
+        [this](fcitx::EventSourceTime *, uint64_t) {
+            kickProfileLoad();
+            armProfileRefreshTimer();
+            return false;  // one-shot; we re-arm above
+        });
 }
 
 // ── Addon factory ─────────────────────────────────────────────────────────────

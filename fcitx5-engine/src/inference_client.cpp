@@ -17,7 +17,7 @@ static void iclog(const char *fmt, ...) {
     std::fputc('\n', f); std::fflush(f);
 }
 
-static constexpr char SYSTEM_PROMPT[] =
+static constexpr char kBaseSystemPrompt[] =
     "You are an inline text autocomplete engine. Continue the text you are given with a "
     "few natural words. Output ONLY the continuation. No explanations, no responses, "
     "no punctuation at the start.";
@@ -78,7 +78,9 @@ static bool json_bool(std::string_view json, std::string_view key) {
 
 // ── Payload builder ───────────────────────────────────────────────────────────
 
-static std::string build_payload(const InferenceConfig& cfg, const std::string& context) {
+static std::string build_payload(const InferenceConfig& cfg,
+                                 const std::string& context,
+                                 const std::string& system_prompt) {
     std::string stop_arr = "[";
     for (size_t i = 0; i < cfg.stop_tokens.size(); ++i) {
         if (i) stop_arr += ',';
@@ -109,7 +111,7 @@ static std::string build_payload(const InferenceConfig& cfg, const std::string& 
     // fires when conversational text appears in the user role.
     return std::string(R"({"model":")") + json_escape(cfg.model)
          + R"(","messages":[)"
-         + R"({"role":"system","content":")"    + json_escape(SYSTEM_PROMPT) + R"("},)"
+         + R"({"role":"system","content":")"    + json_escape(system_prompt) + R"("},)"
          + R"({"role":"assistant","content":")" + json_escape(context) + R"("})"
          + R"(],"stream":true,"options":{"num_predict":)"
          + std::to_string(cfg.num_predict)
@@ -159,9 +161,22 @@ static size_t collect_cb(char* ptr, size_t /*size*/, size_t nmemb, void* ud) {
 
 // ── InferenceClient ───────────────────────────────────────────────────────────
 
-InferenceClient::InferenceClient(InferenceConfig cfg) : _cfg(std::move(cfg)) {
+InferenceClient::InferenceClient(InferenceConfig cfg)
+    : _cfg(std::move(cfg)),
+      _system_prompt(kBaseSystemPrompt)
+{
     curl_global_init(CURL_GLOBAL_DEFAULT);
     _thread = std::thread(&InferenceClient::run, this);
+}
+
+void InferenceClient::set_system_prompt(std::string s) {
+    std::lock_guard<std::mutex> lk(_mutex);
+    if (s == _system_prompt) return;  // no-op fast path
+    _system_prompt = std::move(s);
+}
+
+std::string_view InferenceClient::base_system_prompt() {
+    return std::string_view(kBaseSystemPrompt);
 }
 
 InferenceClient::~InferenceClient() {
@@ -243,7 +258,13 @@ void InferenceClient::execute(Req& req) {
         return;
     }
 
-    std::string payload = build_payload(_cfg, req.context);
+    std::string prompt_snapshot;
+    {
+        std::lock_guard<std::mutex> lk(_mutex);
+        prompt_snapshot = _system_prompt;  // frozen for this request
+    }
+
+    std::string payload = build_payload(_cfg, req.context, prompt_snapshot);
     std::string url     = _cfg.ollama_host + "/api/chat";
 
     WriteState ws(req.gen, _gen, req.on_token);
