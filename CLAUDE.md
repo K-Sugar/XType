@@ -24,6 +24,10 @@ See PLAN.md for the session-by-session plan.
 - No X11 input injection (no xdotool)
 - No cloud, no telemetry
 - focus-out MUST NOT commit AI ghost text — call commitString("") to discard before resetState
+- Corpus data is local-only — never sent over the network, never logged outside ~/.local/share/xtype/
+- Password managers (KeePassXC, 1Password, Bitwarden) MUST be in default blocklist when learning is enabled
+- AI-generated suggestions (acceptNextWord/acceptAll) must NEVER be written to the corpus — only user-typed chars
+- Total system prompt (base + style + user description + per-app addendum) must stay under 2000 chars to preserve TTFT
 
 ## Context management
 - Run /compact after planning, before implementation on long sessions
