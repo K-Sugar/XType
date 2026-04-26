@@ -6,8 +6,11 @@ Phase B → Session 12: XTypeEngine C++ core
 See Summary.md for full project context and architecture.
 See PLAN.md for the session-by-session plan.
 
+
+
 ## Session workflow
 1. Read PLAN.md, find the first session not marked [x]
+   (Consult HISTORY.md only if a session references prior work)
 2. Explore — read all relevant files before writing anything
 3. Plan — summarise your approach; pause before touching more than 3 files
 4. Code, run tests, fix failures

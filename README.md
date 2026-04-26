@@ -38,7 +38,9 @@ Fcitx5 engine that works in every text field on your desktop.
 
 ## 1. Summary
 
-**XType** brings Cotypist-style inline AI autocomplete to Linux.
+**XType** brings Cotypist-style inline AI autocomplete to Linux. This project is
+vibe coded by one developer, and basically a personal project. Dont expect perfect
+support or production quality :D** 
 
 As you type, a small local language model continues your sentence in greyed-out
 ghost text directly inside whatever app you're using — your editor, your browser,
