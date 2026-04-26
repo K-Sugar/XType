@@ -1,17 +1,23 @@
 
-# Session U1 — Scaffold every prototype surface
+# Session U1a / U1b / U1c — Qt6/QML Settings App (pivoted from web prototype scaffold)
 
-> Goal: land typed scaffolding for every option, control, and metric that the
-> prototype renders, across all six pages and the persistent sidebar. After
-> this session, every UI element is bound to a real `XTypeConfig` field, a
-> real engine accessor, or a real bridge endpoint — even if those fields and
-> endpoints return defaults / zeros / fixtures. Real behaviour is filled in
-> by later sessions (and by Sessions 17–22 already on the roadmap).
+> **Pivot note (2026-04-27):** Session U1 has been split into three sub-sessions
+> (U1a, U1b, U1c) and pivoted from the React+Python bridge approach to a
+> standalone Qt 6 / QML native app. The working plan lives in `ui-ultra-plan/`.
+> This file is kept as a **frozen reference** for the §U1.1–§U1.5 inventory and
+> engine scaffold spec (§U1.2). If this file and `ui-ultra-plan/` diverge, the
+> folder wins.
 >
-> This is **scaffolding**, not implementation. No metric is actually
-> recorded; no phrase is actually matched; no per-app override actually
-> branches the engine. The point is to nail down the contract so that
-> follow-up sessions are pure body-fills.
+> **Sub-session headline commits:**
+> - U1a (Steps 0–4): `feat(settings): qt6 foundation + window chrome`
+> - U1b (Steps 5–7): `feat(settings): primitives + config store + engine probe`
+> - U1c (Steps 8, 10–12): `feat(settings): qt6/qml standalone settings app — full prototype port`
+
+## U1.1 — Inventory of prototype surfaces
+
+Each table column:
+- **UI control** — what the prototype renders today.
+- **Status** — `exists` (already in `XTypeConfig` / engine), `partial` (data path partly built), `missing` (no backend at all).
 
 ## U1.1 — Inventory of prototype surfaces
 

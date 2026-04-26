@@ -484,27 +484,7 @@
 
 ### [ ] Session 22 — Settings UI + per-app profiles
 
-**Files:** `settings/` (new directory, Qt6/QML or KCModule)
-
-**Objectives:**
-- Qt6/KDE settings panel (KCModule preferred for native KDE Settings integration)
-- Tabs / sections expose:
-  1. **General**: enable/disable, model preset (dropdown: Low/Balanced/High/Enthusiast/Custom), debounce slider
-  2. **Personalization**: corpus collection toggle, "Wipe corpus" button, view corpus stats, personal prompt editor (multi-line text), avoid-phrases editor (chip list), tone selector
-  3. **Per-app overrides**: list of apps with overrides, add/edit/remove, per-row controls for enable/model/debounce/prompt-addendum
-  4. **Blocklist**: editable list (separate from per-app, simple list)
-  5. **Status**: Ollama health, current model, profile last-updated, corpus size
-- All changes write to `~/.config/xtype/config.toml` and trigger `fcitx5-remote -r` on save (with confirmation toast)
-- "Test suggestion" widget: small text input, type into it, see live ghost text from current config
-- Integrates with KDE System Settings under Input & Output → Input Method
-
-**Gotchas:**
-- TOML round-tripping: comments and key order are NOT preserved by most TOML libraries. Decide upfront — either use a structured library that preserves comments (`toml++` for C++ has limited support), or rewrite the config from scratch on save and accept comment loss. **Recommended:** rewrite, but include a `[generated_by_ui]` marker comment so users know.
-- Corpus wipe must wipe all rotations (`corpus.txt`, `corpus.txt.1`, etc.) AND the style profile JSON
-- Per-app override editor needs program-name autocomplete. Source candidates from `~/.local/share/applications/*.desktop` and from running fcitx5 logs (programs that have appeared in `ic->program()`). Cache the list.
-- Settings UI changes to model/blocklist must invalidate the per-app InferenceClient pool — easiest: full `fcitx5-remote -r` on every save.
-
-**Commit:** `feat(settings): KDE settings UI — model, personalization, per-app, blocklist`
+(merged into Session U1c — see ui-ultra-plan/)
 
 ---
 
