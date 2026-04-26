@@ -459,17 +459,31 @@ Status from the Phase B integration test matrix on KDE Plasma Wayland.
 
 ## 10. Roadmap
 
-- [x] Phase 0 — Async Ollama client, ContextBuffer, Debouncer, benchmarks
-- [x] Phase A — IBus prototype: skeleton, preedit UX, focus handling, config
-- [x] Phase B — Fcitx5 production: CMake addon, libcurl client, C++ engine
-- [x] Browser compatibility hardening (Zen, Chromium)
-- [x] Anti-loop inference (assistant-prefill chat format)
-- [ ] PKGBUILD + systemd user service + AUR submission
-- [ ] KDE settings panel (KCModule) with per-app profile overrides
-- [ ] Optional GPU acceleration via Ollama Vulkan/ROCm backends
-- [ ] Multi-language model presets
+### Shipped
 
-The full session-by-session plan lives in [`PLAN.md`](./PLAN.md).
+- [x] **Phase 0** — Async Ollama client, ContextBuffer, Debouncer, TTFT benchmark harness
+- [x] **Phase A** — IBus prototype (Python): engine skeleton, preedit UX, focus handling, TOML config, end-to-end validation on KDE Wayland
+- [x] **Phase B** — Fcitx5 production (C++20): CMake addon, libcurl streaming client, engine core, KDE Plasma Wayland integration matrix
+- [x] Browser compatibility hardening — Zen GTK4 per-keystroke cycle, Chromium text-input-v3 commit ordering
+- [x] Anti-loop inference — `qwen2.5:1.5b` upgrade with assistant-prefill chat format
+
+### Planned
+
+- [ ] **Phase D — Personalization engine** (Sessions 15–17)
+  - Opt-in writing-corpus collector with a hard-coded password-manager blocklist and AI-suggestion exclusion
+  - Style profile extraction (representative exemplars, common openers) with privacy filtering for emails, secrets, and ID-shaped digit runs
+  - Dynamic system-prompt assembly with style exemplars and a 5-minute corpus-mtime refresh, capped at 2000 chars to preserve TTFT
+- [ ] **Phase E — Model & prompt customization** (Sessions 18–19)
+  - Hardware-tier model presets (Low / Balanced / High / Enthusiast) with RAM-based auto-selection and Ollama health-check fallback
+  - Personal prompt config — `description`, `tone`, `avoid_phrases`
+- [ ] **Phase F — Per-app settings** (Session 20)
+  - Per-app overrides for `enabled`, `model`, `debounce_ms`, `prompt_addendum`
+  - Bounded LRU `InferenceClient` pool (cap 3) for per-app model routing
+- [ ] **Phase G — Packaging & polish** (Sessions 21–22)
+  - PKGBUILD + systemd user service + AUR submission
+  - KCModule settings panel — General, Personalization, Per-app, Blocklist, Status
+
+The full session-by-session plan — file layouts, interfaces, and per-session gotchas — lives in [`PLAN.md`](./PLAN.md). Speculative ideas (LoRA fine-tuning loop, per-field context detection, acceptance-history ranking) are tracked under "Future work" at the bottom of that file.
 
 ---
 
