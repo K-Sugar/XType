@@ -128,9 +128,6 @@ Item {
                                 implicitWidth: 160; implicitHeight: 32
                                 font.family: Theme.sansFamily; font.pixelSize: 12
 
-                                ToolTip.text: "Per-app mode — engine still uses global prompt (Session 20)"
-                                ToolTip.visible: currentIndex !== 0 && currentIndex !== 4 && hovered
-
                                 contentItem: Text {
                                     leftPadding: 10
                                     text: parent.displayText
@@ -158,15 +155,11 @@ Item {
                                     const entry = Config.apps[AppsKnown.canonicalForId(root.selectedId)]
                                     return entry && entry.num_predict ? entry.num_predict : Config.numPredict
                                 }
-                                comingSoon: true
                                 width: 160
                                 onCommitted: (v) => {
                                     if (root.selectedId !== "")
                                         Config.setApp(AppsKnown.canonicalForId(root.selectedId), "num_predict", v)
                                 }
-
-                                ToolTip.text: "Per-app override — engine still uses global value (Session 20)"
-                                ToolTip.visible: comingSoon && hovered
                             }
                         }
                     }
