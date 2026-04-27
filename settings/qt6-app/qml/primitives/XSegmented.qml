@@ -1,12 +1,14 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Controls.Basic
 import XType.Settings 1.0
 
 Item {
     id: root
-    property var options: []
-    property int selectedIndex: 0
+    property var  options: []
+    property int  selectedIndex: 0
     property bool comingSoon: false
+    property var  comingSoonIndices: []    // per-option comingSoon (still fires onChange per §4 #13)
     signal selected(int index)
 
     implicitHeight: 30
@@ -32,6 +34,7 @@ Item {
                     required property int index
                     segLabel: modelData
                     active: index === root.selectedIndex
+                    optComingSoon: root.comingSoonIndices.indexOf(index) >= 0
                     height: segRow.height
                     onSegClicked: root.selected(index)
                 }
@@ -43,7 +46,14 @@ Item {
         id: segRoot
         property string segLabel: ""
         property bool active: false
+        property bool optComingSoon: false
         signal segClicked()
+
+        opacity: optComingSoon ? 0.45 : 1.0
+        Accessible.description: optComingSoon ? "Not yet wired into the engine" : ""
+
+        ToolTip.text: "Not yet wired into the engine"
+        ToolTip.visible: optComingSoon && segMa.containsMouse
 
         implicitWidth: segText.implicitWidth + 24
 
@@ -65,7 +75,9 @@ Item {
         }
 
         MouseArea {
+            id: segMa
             anchors.fill: parent
+            hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             onClicked: segRoot.segClicked()
         }

@@ -112,6 +112,8 @@ void ConfigStore::load() {
         if (auto v = (*lrn)["max_corpus_mb"].value<int64_t>())           _maxCorpusMb = static_cast<int>(*v);
         if (auto v = (*lrn)["min_sentence_chars"].value<int64_t>())      _minSentenceChars = static_cast<int>(*v);
         if (auto v = (*lrn)["include_examples_in_prompt"].value<bool>()) _includeExamplesInPrompt = *v;
+        if (auto v = (*lrn)["voice_strength"].value<int64_t>())           _voiceStrength = static_cast<int>(*v);
+        if (auto v = (*lrn)["forget_after_days"].value<int64_t>())        _forgetAfterDays = static_cast<int>(*v);
     }
 
     // --- [user_prompt] ---
@@ -195,6 +197,8 @@ void ConfigStore::writeToml(const QString &path) {
     lrn.insert_or_assign("max_corpus_mb",              static_cast<int64_t>(_maxCorpusMb));
     lrn.insert_or_assign("min_sentence_chars",         static_cast<int64_t>(_minSentenceChars));
     lrn.insert_or_assign("include_examples_in_prompt", _includeExamplesInPrompt);
+    lrn.insert_or_assign("voice_strength",             static_cast<int64_t>(_voiceStrength));
+    lrn.insert_or_assign("forget_after_days",          static_cast<int64_t>(_forgetAfterDays));
     root.insert_or_assign("learning", std::move(lrn));
 
     // [user_prompt]
@@ -275,6 +279,8 @@ void ConfigStore::resetAll() {
     _maxCorpusMb             = 50;
     _minSentenceChars        = 12;
     _includeExamplesInPrompt = true;
+    _voiceStrength           = 50;
+    _forgetAfterDays         = 0;
 
     _userDescription  = {};
     _userTone         = {};
@@ -314,6 +320,8 @@ void ConfigStore::resetAll() {
     emit maxCorpusMbChanged();
     emit minSentenceCharsChanged();
     emit includeExamplesInPromptChanged();
+    emit voiceStrengthChanged();
+    emit forgetAfterDaysChanged();
     emit userDescriptionChanged();
     emit userToneChanged();
     emit userAvoidPhrasesChanged();
@@ -326,7 +334,7 @@ void ConfigStore::resetAll() {
 // Setters
 // -------------------------------------------------------------------------
 #define CS_SET(field, signal) \
-    if (_##field == v) return; _##field = v; emit signal(); emit changed(); scheduleSave()
+    do { if (_##field == v) return; _##field = v; emit signal(); emit changed(); scheduleSave(); } while(0)
 
 void ConfigStore::setEngineEnabled(bool v)              { CS_SET(engineEnabled,        engineEnabledChanged); }
 void ConfigStore::setPartialAccept(bool v)              { CS_SET(partialAccept,         partialAcceptChanged); }
@@ -354,9 +362,23 @@ void ConfigStore::setFlushIntervalSec(int v)            { CS_SET(flushIntervalSe
 void ConfigStore::setMaxCorpusMb(int v)                 { CS_SET(maxCorpusMb,          maxCorpusMbChanged); }
 void ConfigStore::setMinSentenceChars(int v)            { CS_SET(minSentenceChars,      minSentenceCharsChanged); }
 void ConfigStore::setIncludeExamplesInPrompt(bool v)    { CS_SET(includeExamplesInPrompt, includeExamplesInPromptChanged); }
+void ConfigStore::setVoiceStrength(int v)               { CS_SET(voiceStrength,           voiceStrengthChanged); }
+void ConfigStore::setForgetAfterDays(int v)             { CS_SET(forgetAfterDays,         forgetAfterDaysChanged); }
 
 void ConfigStore::setUserDescription(const QString &v)  { CS_SET(userDescription,       userDescriptionChanged); }
 void ConfigStore::setUserTone(const QString &v)         { CS_SET(userTone,              userToneChanged); }
 void ConfigStore::setUserAvoidPhrases(const QStringList &v){ CS_SET(userAvoidPhrases,   userAvoidPhrasesChanged); }
 
 void ConfigStore::setApps(const QVariantMap &v)        { CS_SET(apps,                  appsChanged); }
+
+void ConfigStore::setApp(const QString &id, const QString &key, const QVariant &value) {
+    QVariantMap appMap = _apps.value(id).toMap();
+    if (!value.isValid() || value.isNull())
+        appMap.remove(key);
+    else
+        appMap.insert(key, value);
+    _apps.insert(id, appMap);
+    emit appsChanged();
+    emit changed();
+    scheduleSave();
+}

@@ -15,6 +15,12 @@
 #include "config_store.h"
 #include "engine_probe.h"
 #include "reloader.h"
+#include "ollama_client.h"
+#include "corpus_stats.h"
+#include "style_profile_model.h"
+#include "log_tail.h"
+#include "recent_events_model.h"
+#include "apps_known.h"
 
 class GrainProvider : public QQuickImageProvider {
 public:
@@ -53,14 +59,26 @@ int main(int argc, char** argv) {
     if (QFontDatabase::addApplicationFont(fontBase + "JetBrainsMono-Variable.ttf") < 0)
         qWarning() << "xtype-settings: failed to load JetBrains Mono Variable font";
 
-    static ConfigStore  configStore;
-    static EngineProbe  engineProbe;
-    static Reloader     reloader;
+    static ConfigStore       configStore;
+    static EngineProbe       engineProbe;
+    static Reloader          reloader;
+    static OllamaClient      ollamaClient;
+    static CorpusStats       corpusStats;
+    static StyleProfileModel styleProfile;
+    static LogTail           logTail;
+    static RecentEventsModel recentEvents;
+    static AppsKnown         appsKnown;
 
     configStore.load();
-    qmlRegisterSingletonInstance<ConfigStore> ("XType.Settings", 1, 0, "Config",   &configStore);
-    qmlRegisterSingletonInstance<EngineProbe> ("XType.Settings", 1, 0, "Engine",   &engineProbe);
-    qmlRegisterSingletonInstance<Reloader>    ("XType.Settings", 1, 0, "Reloader", &reloader);
+    qmlRegisterSingletonInstance<ConfigStore>      ("XType.Settings", 1, 0, "Config",        &configStore);
+    qmlRegisterSingletonInstance<EngineProbe>      ("XType.Settings", 1, 0, "Engine",        &engineProbe);
+    qmlRegisterSingletonInstance<Reloader>         ("XType.Settings", 1, 0, "Reloader",      &reloader);
+    qmlRegisterSingletonInstance<OllamaClient>     ("XType.Settings", 1, 0, "Ollama",        &ollamaClient);
+    qmlRegisterSingletonInstance<CorpusStats>      ("XType.Settings", 1, 0, "CorpusStats",   &corpusStats);
+    qmlRegisterSingletonInstance<StyleProfileModel>("XType.Settings", 1, 0, "StyleProfile",  &styleProfile);
+    qmlRegisterSingletonInstance<LogTail>          ("XType.Settings", 1, 0, "Logs",          &logTail);
+    qmlRegisterSingletonInstance<RecentEventsModel>("XType.Settings", 1, 0, "RecentEvents",  &recentEvents);
+    qmlRegisterSingletonInstance<AppsKnown>        ("XType.Settings", 1, 0, "AppsKnown",     &appsKnown);
 
     QQmlApplicationEngine engine;
     engine.addImageProvider("grain", new GrainProvider);   // must precede loadFromModule

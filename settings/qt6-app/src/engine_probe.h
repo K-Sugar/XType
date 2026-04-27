@@ -12,6 +12,7 @@ class EngineProbe : public QObject {
     Q_PROPERTY(double  ramGb        READ ramGb        NOTIFY ramGbChanged)
     Q_PROPERTY(QString state        READ state        NOTIFY stateChanged)
     Q_PROPERTY(QString stateMessage READ stateMessage NOTIFY stateMessageChanged)
+    Q_PROPERTY(int     latencyP50   READ latencyP50   CONSTANT)
 
 public:
     explicit EngineProbe(QObject *parent = nullptr);
@@ -20,6 +21,7 @@ public:
     double  ramGb()        const { return _ramGb; }
     QString state()        const { return _state; }
     QString stateMessage() const { return _stateMessage; }
+    int     latencyP50()   const { return 0; }  // scaffold; engine doesn't yet export this via IPC
 
 signals:
     void cpuPctChanged();

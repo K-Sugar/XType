@@ -43,6 +43,8 @@ class ConfigStore : public QObject {
     Q_PROPERTY(int     maxCorpusMb              READ maxCorpusMb              WRITE setMaxCorpusMb              NOTIFY maxCorpusMbChanged)
     Q_PROPERTY(int     minSentenceChars         READ minSentenceChars         WRITE setMinSentenceChars         NOTIFY minSentenceCharsChanged)
     Q_PROPERTY(bool    includeExamplesInPrompt  READ includeExamplesInPrompt  WRITE setIncludeExamplesInPrompt  NOTIFY includeExamplesInPromptChanged)
+    Q_PROPERTY(int     voiceStrength            READ voiceStrength            WRITE setVoiceStrength            NOTIFY voiceStrengthChanged)
+    Q_PROPERTY(int     forgetAfterDays          READ forgetAfterDays          WRITE setForgetAfterDays          NOTIFY forgetAfterDaysChanged)
 
     // UserPrompt
     Q_PROPERTY(QString     userDescription  READ userDescription  WRITE setUserDescription  NOTIFY userDescriptionChanged)
@@ -88,6 +90,8 @@ public:
     int     maxCorpusMb()               const { return _maxCorpusMb; }
     int     minSentenceChars()           const { return _minSentenceChars; }
     bool    includeExamplesInPrompt()    const { return _includeExamplesInPrompt; }
+    int     voiceStrength()              const { return _voiceStrength; }
+    int     forgetAfterDays()            const { return _forgetAfterDays; }
 
     QString     userDescription()        const { return _userDescription; }
     QString     userTone()               const { return _userTone; }
@@ -122,6 +126,10 @@ public:
     void setMaxCorpusMb(int v);
     void setMinSentenceChars(int v);
     void setIncludeExamplesInPrompt(bool v);
+    void setVoiceStrength(int v);
+    void setForgetAfterDays(int v);
+
+    Q_INVOKABLE void setApp(const QString &id, const QString &key, const QVariant &value);
 
     void setUserDescription(const QString &v);
     void setUserTone(const QString &v);
@@ -166,6 +174,8 @@ signals:
     void maxCorpusMbChanged();
     void minSentenceCharsChanged();
     void includeExamplesInPromptChanged();
+    void voiceStrengthChanged();
+    void forgetAfterDaysChanged();
 
     void userDescriptionChanged();
     void userToneChanged();
@@ -209,6 +219,8 @@ private:
     int     _maxCorpusMb             = 50;
     int     _minSentenceChars        = 12;
     bool    _includeExamplesInPrompt = true;
+    int     _voiceStrength           = 50;
+    int     _forgetAfterDays         = 0;
 
     // UserPrompt
     QString     _userDescription;

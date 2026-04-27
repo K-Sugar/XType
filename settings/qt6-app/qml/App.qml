@@ -54,18 +54,58 @@ Window {
                 onPageChanged: (id) => window.currentPage = id
             }
 
-            // Content placeholder — Step 5+ fills this with StackView pages
-            Rectangle {
+            // Content area — pages loaded on demand with fade transition
+            Item {
+                id: contentArea
                 anchors { top: parent.top; left: sidebar.right; right: parent.right; bottom: parent.bottom }
-                color: "transparent"
 
-                Text {
-                    anchors.centerIn: parent
-                    text: window.currentPage
-                    color: Theme.ink45
-                    font.family: Theme.sansFamily
-                    font.pixelSize: 14
-                    renderType: Text.NativeRendering
+                property string _loadedPage: ""
+
+                function pageSource(id) {
+                    switch (id) {
+                        case "general": return Qt.resolvedUrl("pages/PageGeneral.qml")
+                        case "person":  return Qt.resolvedUrl("pages/PagePersonalisation.qml")
+                        case "block":   return Qt.resolvedUrl("pages/PageBlockList.qml")
+                        case "apps":    return Qt.resolvedUrl("pages/PagePerApp.qml")
+                        case "model":   return Qt.resolvedUrl("pages/PageModel.qml")
+                        case "about":   return Qt.resolvedUrl("pages/PageAbout.qml")
+                        default:        return ""
+                    }
+                }
+
+                Loader {
+                    id: pageLoader
+                    anchors.fill: parent
+                    opacity: 1.0
+                }
+
+                SequentialAnimation {
+                    id: pageTransition
+                    property string targetPage: ""
+                    NumberAnimation { target: pageLoader; property: "opacity"; to: 0; duration: 60; easing.type: Easing.InQuad }
+                    ScriptAction {
+                        script: {
+                            pageLoader.source = contentArea.pageSource(pageTransition.targetPage)
+                            contentArea._loadedPage = pageTransition.targetPage
+                        }
+                    }
+                    NumberAnimation { target: pageLoader; property: "opacity"; to: 1; duration: 220; easing.type: Easing.OutCubic }
+                }
+
+                Connections {
+                    target: window
+                    function onCurrentPageChanged() {
+                        if (contentArea._loadedPage === window.currentPage) return
+                        if (!pageTransition.running) {
+                            pageTransition.targetPage = window.currentPage
+                            pageTransition.start()
+                        }
+                    }
+                }
+
+                Component.onCompleted: {
+                    pageLoader.source = contentArea.pageSource(window.currentPage)
+                    contentArea._loadedPage = window.currentPage
                 }
             }
         }

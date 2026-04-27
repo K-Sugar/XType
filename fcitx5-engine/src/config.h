@@ -42,6 +42,8 @@ struct LearningConfig {
     int         max_corpus_mb              = 50;
     int         min_sentence_chars         = 12;
     bool        include_examples_in_prompt = true;
+    int         voice_strength             = 50;   // 0-100; engine does not read yet (comingSoon)
+    int         forget_after_days          = 0;    // 0 = disabled; engine does not read yet (comingSoon)
 };
 
 struct UserPromptConfig {

@@ -22,6 +22,12 @@ qt_add_executable(xtype-settings
     src/config_store.cpp
     src/engine_probe.cpp
     src/reloader.cpp
+    src/ollama_client.cpp
+    src/corpus_stats.cpp
+    src/style_profile_model.cpp
+    src/log_tail.cpp
+    src/recent_events_model.cpp
+    src/apps_known.cpp
 )
 
 set_source_files_properties(qml/Theme.qml        PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
@@ -54,6 +60,13 @@ qt_add_qml_module(xtype-settings
         qml/primitives/XKbd.qml
         qml/primitives/XPhraseRow.qml
         qml/primitives/XLogList.qml
+        qml/pages/LiveDemo.qml
+        qml/pages/PageGeneral.qml
+        qml/pages/PageBlockList.qml
+        qml/pages/PagePerApp.qml
+        qml/pages/PageModel.qml
+        qml/pages/PagePersonalisation.qml
+        qml/pages/PageAbout.qml
     RESOURCES
         data/icons/xtype.svg
         data/fonts/Inter-Variable.ttf
