@@ -213,12 +213,12 @@ InferenceClient::~InferenceClient() {
     curl_global_cleanup();
 }
 
-void InferenceClient::request(std::string context, TokenCb on_token,
-                              DoneCb on_done, ErrCb on_error) {
+void InferenceClient::request(std::string context, InferenceConfig cfg,
+                              TokenCb on_token, DoneCb on_done, ErrCb on_error) {
     uint64_t gen = ++_gen;
     {
         std::lock_guard<std::mutex> lk(_mutex);
-        _pending = Req{std::move(context), gen,
+        _pending = Req{std::move(context), std::move(cfg), gen,
                        std::move(on_token), std::move(on_done), std::move(on_error)};
     }
     _cv.notify_one();
@@ -286,8 +286,8 @@ void InferenceClient::execute(Req& req) {
         prompt_snapshot = _system_prompt;  // frozen for this request
     }
 
-    std::string payload = build_payload(_cfg, req.context, prompt_snapshot);
-    std::string url     = _cfg.ollama_host + "/api/chat";
+    std::string payload = build_payload(req.cfg, req.context, prompt_snapshot);
+    std::string url     = req.cfg.ollama_host + "/api/chat";
 
     WriteState ws(req.gen, _gen, req.on_token);
 

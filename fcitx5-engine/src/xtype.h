@@ -55,6 +55,7 @@ private:
     void invalidate();
     bool isBlocked(const std::string &program) const;
     void harvestSentence(const std::string &program);
+    const AppOverride* currentAppOverride() const;  // nullptr if no override
 
     // Profile lifecycle. _profile is read+written only on the main thread
     // (mutated from event-dispatcher callbacks marshaled from the worker).

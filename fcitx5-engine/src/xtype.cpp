@@ -173,11 +173,14 @@ void XTypeEngine::activate(const fcitx::InputMethodEntry &,
     auto *ic = event.inputContext();
     const std::string &prog = ic->program();
     dbg("activate prog=%s _lastProg=%s", prog.c_str(), _lastProg.c_str());
-    if (prog != _lastProg)
+    bool appChanged = (prog != _lastProg);
+    if (appChanged)
         resetState(ic);       // app changed: full reset including _ctx
     else
         resetInferenceOnly(); // same app cycling (Zen GTK4 pattern): preserve _ctx
     _lastProg = prog;
+    if (appChanged)
+        applyPrompt();        // re-apply prompt addendum for the new app
 }
 
 void XTypeEngine::deactivate(const fcitx::InputMethodEntry &,
@@ -225,6 +228,10 @@ void XTypeEngine::keyEvent(const fcitx::InputMethodEntry &,
 
     // Blocklisted apps pass everything through.
     if (isBlocked(ic->program())) return;
+
+    // Per-app override: if enabled is explicitly false, pass through.
+    if (auto* ov = currentAppOverride(); ov && ov->enabled.has_value() && !*ov->enabled)
+        return;
 
     // Phrase blocklist stub (always false until future session implements matching).
     if (_phraseBlock.matches(_ctx.contextText())) return;
@@ -334,8 +341,11 @@ void XTypeEngine::keyEvent(const fcitx::InputMethodEntry &,
             harvestSentence(ic->program());
 
         _debounceTimer.reset();
+        int debounceMs = _cfg.inference.debounce_ms;
+        if (auto* ov = currentAppOverride(); ov && ov->debounce_ms.has_value())
+            debounceMs = *ov->debounce_ms;
         uint64_t fireUs = fcitx::now(CLOCK_MONOTONIC) +
-                          static_cast<uint64_t>(_cfg.inference.debounce_ms) * 1000;
+                          static_cast<uint64_t>(debounceMs) * 1000;
         auto icRef = ic->watch();
         auto *icPtr = ic;
         _debounceTimer = _instance->eventLoop().addTimeEvent(
@@ -369,9 +379,14 @@ void XTypeEngine::requestInference(
     const uint64_t myGen = _gen;
     const auto     startUs = fcitx::now(CLOCK_MONOTONIC);
 
+    InferenceConfig reqCfg = _cfg.inference;
+    if (auto* ov = currentAppOverride(); ov && ov->num_predict.has_value())
+        reqCfg.num_predict = *ov->num_predict;
+
     dbg("requestInference ctx='%.40s...'", ctx.c_str());
     _inference.request(
         std::move(ctx),
+        std::move(reqCfg),
         [this, myGen, icRef, icPtr](std::string token) {
             dbg("token received: '%s' icValid=%d", token.c_str(), (int)icRef.isValid());
             if (!icRef.isValid()) { dbg("on_token: icRef invalid — dropping"); return; }
@@ -494,6 +509,16 @@ bool XTypeEngine::isBlocked(const std::string &program) const {
     for (const auto &app : _cfg.behaviour.blocklist_apps)
         if (prog_lower.find(app) != std::string::npos) return true;
     return false;
+}
+
+const AppOverride* XTypeEngine::currentAppOverride() const {
+    auto it = _cfg.apps.find(_lastProg);
+    if (it != _cfg.apps.end()) return &it->second;
+    std::string lower = _lastProg;
+    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+    it = _cfg.apps.find(lower);
+    if (it != _cfg.apps.end()) return &it->second;
+    return nullptr;
 }
 
 void XTypeEngine::harvestSentence(const std::string &program) {
@@ -658,6 +683,14 @@ void XTypeEngine::applyPrompt() {
         auto it = kToneMap.find(_cfg.user_prompt.tone);
         if (it != kToneMap.end())
             in.base += it->second;
+    }
+
+    // Per-app prompt addendum — only applied when an active app is known.
+    if (!_lastProg.empty()) {
+        if (auto* ov = currentAppOverride();
+            ov && ov->prompt_addendum.has_value() && !ov->prompt_addendum->empty()) {
+            in.base += "\n" + *ov->prompt_addendum;
+        }
     }
 
     bool truncated = false;

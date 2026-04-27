@@ -24,7 +24,10 @@ public:
     InferenceClient& operator=(const InferenceClient&) = delete;
 
     // Thread-safe. Each new call cancels any in-flight request.
-    void request(std::string context, TokenCb on_token, DoneCb on_done, ErrCb on_error);
+    // cfg is snapshotted into the Req so execute() uses it on the worker thread
+    // without racing against update_config() on the main thread.
+    void request(std::string context, InferenceConfig cfg,
+                 TokenCb on_token, DoneCb on_done, ErrCb on_error);
     void cancel();
     bool health_check();  // blocking GET /api/tags
 
@@ -40,11 +43,12 @@ public:
 
 private:
     struct Req {
-        std::string context;
-        uint64_t    gen{};
-        TokenCb     on_token;
-        DoneCb      on_done;
-        ErrCb       on_error;
+        std::string     context;
+        InferenceConfig cfg;     // snapshotted at request() time; used by execute()
+        uint64_t        gen{};
+        TokenCb         on_token;
+        DoneCb          on_done;
+        ErrCb           on_error;
     };
 
     void run();

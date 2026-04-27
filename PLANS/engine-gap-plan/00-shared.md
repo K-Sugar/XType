@@ -175,6 +175,12 @@ ctest --test-dir settings/qt6-app/build   # unit tests
   `_recent`, but gate at 500 ms minimum interval (atomic timestamp
   flag). The settings app reads when it polls EngineProbe.
 
+- **E4.3: `InferenceClient::execute()` reads `_cfg` on the worker thread** (verified in E4):
+  `execute()` calls `build_payload(_cfg, ...)` directly using the stored config — not a copy
+  captured at `request()` time. The E4 plan's update_config→request→restore pattern would race.
+  Fix: snapshot `InferenceConfig` into the `Req` struct at `request()` time; `execute()` uses
+  `req.cfg` instead of `_cfg`.
+
 - **E3 QML primitive API drift** (discovered in E3):
   The E3 session plan's QML snippets reference primitive APIs that do not match
   the actual components:
