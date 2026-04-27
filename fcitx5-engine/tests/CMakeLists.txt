@@ -46,3 +46,10 @@ target_link_libraries(test_config_loader PRIVATE
 catch_discover_tests(test_config_loader
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
+
+add_executable(test_phrase_blocklist test_phrase_blocklist.cpp)
+target_include_directories(test_phrase_blocklist PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../src)
+target_link_libraries(test_phrase_blocklist PRIVATE
+    Catch2::Catch2WithMain
+)
+catch_discover_tests(test_phrase_blocklist)
