@@ -17,7 +17,7 @@ Item {
 
         Text {
             text: root.label
-            font.family: Theme.sansFamily; font.pixelSize: 13.5; font.weight: Font.Medium
+            font.family: Theme.sansFamily; font.pixelSize: 14; font.weight: Font.Medium
             color: Theme.ink100
             renderType: Text.NativeRendering
         }
@@ -25,7 +25,7 @@ Item {
         Text {
             visible: root.desc !== ""
             text: root.desc
-            font.family: Theme.sansFamily; font.pixelSize: 11.5
+            font.family: Theme.sansFamily; font.pixelSize: 12
             color: Theme.ink45
             renderType: Text.NativeRendering
             wrapMode: Text.WordWrap

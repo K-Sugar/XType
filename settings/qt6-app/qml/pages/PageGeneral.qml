@@ -3,6 +3,8 @@ import QtQuick.Controls.Basic
 import XType.Settings 1.0
 
 Item {
+    anchors.fill: parent
+
     Flickable {
         id: flick
         anchors.fill: parent

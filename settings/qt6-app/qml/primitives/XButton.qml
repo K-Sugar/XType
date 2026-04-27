@@ -36,7 +36,7 @@ Item {
         id: labelText
         anchors.centerIn: parent
         text: root.label
-        font.family: Theme.sansFamily; font.pixelSize: 12.5; font.weight: Font.Medium
+        font.family: Theme.sansFamily; font.pixelSize: 13; font.weight: Font.Medium
         color: {
             if (root.variant === "primary") return "white"
             if (root.variant === "ghost") return root._hovered ? Theme.ink100 : Theme.ink45

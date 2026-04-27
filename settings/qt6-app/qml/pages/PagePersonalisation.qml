@@ -5,6 +5,7 @@ import XType.Settings 1.0
 
 Item {
     id: root
+    anchors.fill: parent
 
     Flickable {
         id: flick

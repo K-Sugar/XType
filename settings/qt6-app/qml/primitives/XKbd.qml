@@ -24,7 +24,7 @@ Item {
         id: keyText
         anchors.centerIn: parent
         text: root.key
-        font.family: Theme.monoFamily; font.pixelSize: 10.5
+        font.family: Theme.monoFamily; font.pixelSize: 11
         color: Theme.ink80
         renderType: Text.NativeRendering
     }

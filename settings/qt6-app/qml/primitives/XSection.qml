@@ -14,7 +14,7 @@ Item {
         visible: root.num !== ""
         anchors { left: parent.left; verticalCenter: parent.verticalCenter }
         text: root.num
-        font.family: Theme.monoFamily; font.pixelSize: 10.5; font.weight: Font.SemiBold
+        font.family: Theme.monoFamily; font.pixelSize: 11; font.weight: Font.SemiBold
         color: Theme.purpleSoft
         renderType: Text.NativeRendering
     }
@@ -27,7 +27,7 @@ Item {
             verticalCenter: parent.verticalCenter
         }
         text: root.title
-        font.family: Theme.sansFamily; font.pixelSize: 10.5; font.weight: Font.SemiBold
+        font.family: Theme.sansFamily; font.pixelSize: 11; font.weight: Font.SemiBold
         font.capitalization: Font.AllUppercase
         font.letterSpacing: 1.6
         color: Theme.ink45

@@ -5,6 +5,7 @@ import XType.Settings 1.0
 
 Item {
     id: root
+    anchors.fill: parent
     property string selectedId: ""
 
     Row {
@@ -82,7 +83,7 @@ Item {
                             text: root.selectedId !== ""
                                   ? "Configuring  ·  " + AppsKnown.labelForCanonical(AppsKnown.canonicalForId(root.selectedId))
                                   : ""
-                            font.family: Theme.monoFamily; font.pixelSize: 10.5
+                            font.family: Theme.monoFamily; font.pixelSize: 11
                             font.capitalization: Font.AllUppercase; font.letterSpacing: 1.2
                             color: Theme.purpleSoft
                             renderType: Text.NativeRendering
