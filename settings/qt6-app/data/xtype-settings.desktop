@@ -1,11 +1,10 @@
 [Desktop Entry]
-Type=Application
 Name=XType Settings
-GenericName=Input Method Settings
-Comment=Configure the XType AI text prediction engine
+Comment=Configure ghost-text autocomplete
 Exec=xtype-settings
 Icon=xtype
-Categories=Settings;Accessibility;
-Keywords=input;method;ai;typing;prediction;
+Terminal=false
+Type=Application
+Categories=Settings;InputMethod;Qt;
 StartupNotify=true
 StartupWMClass=xtype-settings
