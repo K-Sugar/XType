@@ -16,5 +16,6 @@ signals:
     void reloadFinished(bool ok);
 
 private:
-    QProcess _proc;
+    QProcess _proc;      // fcitx5-remote -r  (global IM reload)
+    QProcess _dbusProc;  // ReloadAddonConfig  (triggers XTypeEngine::reloadConfig)
 };

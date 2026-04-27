@@ -42,7 +42,7 @@ XTypeConfig config_loader::load(const std::string& path) {
         if (auto* arr = (*t)["stop_tokens"].as_array()) {
             cfg.inference.stop_tokens.clear();
             for (const auto& el : *arr)
-                if (auto s = el.value<std::string>())
+                if (auto s = el.value<std::string>(); s && !s->empty())
                     cfg.inference.stop_tokens.push_back(*s);
         }
     }
