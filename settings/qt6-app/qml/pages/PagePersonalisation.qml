@@ -111,8 +111,53 @@ Item {
                 }
             }
 
-            // ── 02 Your voice profile ──────────────────────────────────────
-            XSection { title: "Your voice profile"; num: "02"; width: parent.width }
+            // ── 02 Corpus settings ────────────────────────────────────────
+            XSection { title: "Corpus settings"; num: "02"; width: parent.width }
+
+            Column {
+                width: parent.width
+                spacing: 0
+
+                XRow {
+                    label: "Max corpus size"
+                    desc: "Older entries are pruned when the file exceeds this limit."
+                    width: parent.width
+                    XSlider {
+                        min: 10; max: 200; step: 10
+                        value: Config.maxCorpusMb
+                        formatFn: function(v) { return v + " MB" }
+                        onCommitted: (v) => Config.maxCorpusMb = v
+                        width: 200
+                    }
+                }
+
+                XRow {
+                    label: "Min sentence length"
+                    desc: "Shorter sentences are not added to the corpus."
+                    width: parent.width
+                    XSlider {
+                        min: 4; max: 30; step: 2
+                        value: Config.minSentenceChars
+                        formatFn: function(v) { return v + " chars" }
+                        onCommitted: (v) => Config.minSentenceChars = v
+                        width: 200
+                    }
+                }
+
+                XRow {
+                    label: "Use corpus in prompt"
+                    desc: "Include writing style examples from your corpus in the AI prompt."
+                    isLast: true
+                    width: parent.width
+                    XToggle {
+                        on: Config.includeExamplesInPrompt
+                        onToggled: (v) => Config.includeExamplesInPrompt = v
+                    }
+                }
+            }
+
+            // ── 03 Your voice profile ──────────────────────────────────────
+            XSection { title: "Your voice profile"; num: "03"; width: parent.width }
 
             XCard {
                 width: parent.width
@@ -158,8 +203,8 @@ Item {
                 }
             }
 
-            // ── 03 Your voice settings ────────────────────────────────────
-            XSection { title: "Your voice"; num: "03"; width: parent.width }
+            // ── 04 Your voice settings ────────────────────────────────────
+            XSection { title: "Your voice"; num: "04"; width: parent.width }
 
             Column {
                 width: parent.width
@@ -200,8 +245,8 @@ Item {
                 }
             }
 
-            // ── 04 Phrases to avoid ────────────────────────────────────────
-            XSection { title: "Phrases to avoid"; num: "04"; width: parent.width }
+            // ── 05 Phrases to avoid ────────────────────────────────────────
+            XSection { title: "Phrases to avoid"; num: "05"; width: parent.width }
 
             Row {
                 width: parent.width
