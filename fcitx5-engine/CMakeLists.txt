@@ -37,6 +37,10 @@ add_library(prompt_builder_obj OBJECT src/prompt_builder.cpp)
 target_include_directories(prompt_builder_obj PUBLIC src)
 set_target_properties(prompt_builder_obj PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
+add_library(config_loader_obj OBJECT src/config_loader.cpp)
+target_include_directories(config_loader_obj PUBLIC src)
+set_target_properties(config_loader_obj PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 add_library(xtype-fcitx5 SHARED
     src/xtype.cpp
     src/inference_client.cpp
@@ -48,6 +52,7 @@ target_link_libraries(xtype-fcitx5 PRIVATE
     corpus_collector_obj
     style_profile_obj
     prompt_builder_obj
+    config_loader_obj
     Fcitx5::Core
     CURL::libcurl
 )

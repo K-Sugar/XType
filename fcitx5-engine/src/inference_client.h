@@ -32,6 +32,9 @@ public:
     // No-op if equal to the current value.
     void set_system_prompt(std::string s);
 
+    // Update inference config (model, temperature, etc.) for subsequent requests. Thread-safe.
+    void update_config(const InferenceConfig& cfg);
+
     // The canonical base instruction this client uses by default.
     static std::string_view base_system_prompt();
 

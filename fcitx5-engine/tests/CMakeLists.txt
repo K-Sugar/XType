@@ -35,3 +35,14 @@ target_link_libraries(test_prompt_builder PRIVATE
 )
 
 catch_discover_tests(test_prompt_builder)
+
+add_executable(test_config_loader test_config_loader.cpp)
+target_link_libraries(test_config_loader PRIVATE
+    config_loader_obj
+    path_utils_obj
+    Catch2::Catch2WithMain
+)
+
+catch_discover_tests(test_config_loader
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
+)

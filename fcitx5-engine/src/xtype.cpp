@@ -19,6 +19,7 @@
 #include <fcitx/instance.h>
 #include <fcitx/text.h>
 
+#include "config_loader.h"
 #include "path_utils.h"
 #include "prompt_builder.h"
 
@@ -54,6 +55,12 @@ XTypeEngine::XTypeEngine(fcitx::AddonManager *manager)
     : _instance(manager->instance()),
       _inference(_cfg.inference)
 {
+    _cfg = config_loader::load();
+    dbg("config loaded: model=%s debounce=%dms engine_enabled=%d",
+        _cfg.inference.model.c_str(),
+        _cfg.inference.debounce_ms,
+        (int)_cfg.behaviour.engine_enabled);
+
     // Observability env reads (once, on the main thread).
     {
         const char* v = std::getenv("XTYPE_DEBUG_VERBOSE");
@@ -114,11 +121,45 @@ XTypeEngine::XTypeEngine(fcitx::AddonManager *manager)
     } else {
         dbg("[corpus] disabled (opt-in; edit config.h LearningConfig::enabled to enable)");
     }
+
+    _inference.update_config(_cfg.inference);
 }
 
 XTypeEngine::~XTypeEngine() {
     if (_profileWorker && _profileWorker->joinable())
         _profileWorker->join();
+}
+
+void XTypeEngine::reloadConfig() {
+    XTypeConfig newCfg = config_loader::load();
+    dbg("[reload] config re-read: model=%s debounce=%dms",
+        newCfg.inference.model.c_str(), newCfg.inference.debounce_ms);
+
+    _phraseBlock.load(newCfg.behaviour.blocked_phrases);
+
+    bool learningWas = _cfg.learning.enabled;
+    bool learningNow = newCfg.learning.enabled;
+    _cfg = newCfg;
+
+    if (learningWas && !learningNow) {
+        _corpus.reset();
+        dbg("[reload] corpus collector disabled");
+    } else if (!learningWas && learningNow && !_cfg.learning.corpus_path.empty()) {
+        _corpus = std::make_unique<CorpusCollector>(_cfg.learning);
+        if (_corpus->disabled()) { _corpus.reset(); log_warn("corpus disabled after reload"); }
+    }
+
+    if (_corpus) {
+        auto cp = path_utils::expandTilde(_cfg.learning.corpus_path);
+        if (!cp.empty() && cp.string().front() != '~') {
+            _corpusPathExpanded  = cp.string();
+            _profilePathExpanded = (cp.parent_path() / "style_profile.json").string();
+        }
+    }
+
+    applyPrompt();
+    _inference.update_config(_cfg.inference);
+    dbg("[reload] done");
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────

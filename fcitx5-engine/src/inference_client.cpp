@@ -190,6 +190,11 @@ std::string_view InferenceClient::base_system_prompt() {
     return std::string_view(kBaseSystemPrompt);
 }
 
+void InferenceClient::update_config(const InferenceConfig& cfg) {
+    std::lock_guard<std::mutex> lk(_mutex);
+    _cfg = cfg;
+}
+
 InferenceClient::~InferenceClient() {
     ++_gen;  // abort any in-flight request
     {

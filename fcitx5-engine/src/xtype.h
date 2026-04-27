@@ -32,6 +32,8 @@ public:
     const RecentEventsRing&   recentEvents() const noexcept { return _recent; }
     const XTypeConfig&        config()       const noexcept { return _cfg; }
 
+    void reloadConfig() override;
+
     void keyEvent(const fcitx::InputMethodEntry &entry,
                   fcitx::KeyEvent &event) override;
     void activate(const fcitx::InputMethodEntry &entry,
