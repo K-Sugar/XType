@@ -53,3 +53,9 @@ target_link_libraries(test_phrase_blocklist PRIVATE
     Catch2::Catch2WithMain
 )
 catch_discover_tests(test_phrase_blocklist)
+
+add_executable(test_xtype_helpers test_xtype_helpers.cpp)
+target_link_libraries(test_xtype_helpers PRIVATE
+    Catch2::Catch2WithMain
+)
+catch_discover_tests(test_xtype_helpers)

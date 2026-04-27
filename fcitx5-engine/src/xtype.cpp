@@ -506,8 +506,21 @@ void XTypeEngine::invalidate() {
 bool XTypeEngine::isBlocked(const std::string &program) const {
     std::string prog_lower = program;
     std::transform(prog_lower.begin(), prog_lower.end(), prog_lower.begin(), ::tolower);
-    for (const auto &app : _cfg.behaviour.blocklist_apps)
-        if (prog_lower.find(app) != std::string::npos) return true;
+
+    for (const auto &entry : _cfg.behaviour.blocklist_apps) {
+        if (entry.empty()) continue;
+        // Match only complete components; separators are '.' and '_' (reverse-domain-name style).
+        // Prevents "konsole" from matching "konsoleboard" or "kate" matching "kate-beta".
+        auto pos = prog_lower.find(entry);
+        while (pos != std::string::npos) {
+            auto after = pos + entry.size();
+            bool startOk = (pos == 0) || prog_lower[pos - 1] == '.' || prog_lower[pos - 1] == '_';
+            bool endOk   = (after == prog_lower.size())
+                         || prog_lower[after] == '.' || prog_lower[after] == '_';
+            if (startOk && endOk) return true;
+            pos = prog_lower.find(entry, pos + 1);
+        }
+    }
     return false;
 }
 
