@@ -3,7 +3,7 @@
 
   ## Session
 
-  I am running session: <E0>
+  I am running session: <E6>
 
   ## Read order (do this first, in this exact order)
 
@@ -28,6 +28,7 @@
     exploring), call advisor() once.
   - After each step's "Checkpoint"/"Verify" block, confirm it passes
     BEFORE committing.
+  - When the session introduced new features and functions in the Settings App, hold a quick showcase at the end for the user to review it and confirm function.
   - Commit messages are quoted verbatim in each step's "Commit:" line.
     Use them exactly — do not paraphrase or summarise.
   - One commit per step. Do not invent extra commits.

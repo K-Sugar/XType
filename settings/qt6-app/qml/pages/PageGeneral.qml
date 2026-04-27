@@ -37,17 +37,7 @@ Item {
                         onToggled: (v) => Config.engineEnabled = v
                     }
                 }
-                XRow {
-                    label: "Trigger"
-                    desc: "When to start the suggestion request"
-                    width: parent.width
-                    XSegmented {
-                        options: ["Pause", "Manual"]
-                        comingSoonIndices: [1]
-                        selectedIndex: Config.triggerMode === "manual" ? 1 : 0
-                        onSelected: (i) => Config.triggerMode = (i === 1 ? "manual" : "pause")
-                    }
-                }
+
                 XRow {
                     label: "Trigger delay"
                     desc: "Wait after keystroke before requesting"

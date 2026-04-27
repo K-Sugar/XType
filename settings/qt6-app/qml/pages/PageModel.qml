@@ -102,17 +102,7 @@ Item {
             Column {
                 width: parent.width
                 spacing: 0
-                XRow {
-                    label: "Quantisation"
-                    desc: "Model weight precision"
-                    width: parent.width
-                    XSegmented {
-                        options: ["F16", "Q8", "Q4", "Q3"]
-                        comingSoon: true
-                        selectedIndex: 2
-                        width: 180
-                    }
-                }
+
                 XRow {
                     label: "Context window"
                     desc: "Tokens of context fed to the model"
