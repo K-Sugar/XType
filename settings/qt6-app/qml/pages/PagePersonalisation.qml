@@ -106,7 +106,6 @@ Item {
                     width: parent.width
                     XToggle {
                         on: Config.forgetAfterDays > 0
-                        comingSoon: true
                         onToggled: (v) => Config.forgetAfterDays = (v ? 30 : 0)
                     }
                 }
