@@ -7,6 +7,9 @@ build/
 .cache/
 settings/qt6-app/qml/primitives/Demo.qml
 
+# Release notes — kept locally, not tracked
+RELEASE-NOTES-*.md
+
 # Claude Code and planning files — kept locally, not tracked
 .claude/
 .obsidian/
