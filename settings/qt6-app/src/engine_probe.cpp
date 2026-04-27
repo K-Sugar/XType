@@ -132,7 +132,7 @@ void EngineProbe::checkFcitx5State() {
         _stateProc.waitForFinished(200);
     }
 
-    _stateProc.start("fcitx5-remote", {"-s"});
+    _stateProc.start("fcitx5-remote", {"--check"});
     if (!_stateProc.waitForStarted(300)) {
         // Binary missing or not executable
         const QString msg = "fcitx5 not found";

@@ -2,7 +2,7 @@ pragma Singleton
 import QtQuick
 import XType.Settings 1.0
 
-QtObject {
+Item {
     id: reloadCenter
 
     property bool dirty: false
