@@ -2,10 +2,12 @@
 
 #include <atomic>
 #include <cstdint>
+#include <ctime>
 #include <memory>
 #include <optional>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include <fcitx/addonfactory.h>
 #include <fcitx/addonmanager.h>
@@ -17,13 +19,22 @@
 #include "config.h"
 #include "context_buffer.h"
 #include "corpus_collector.h"
+#include "engine_metrics.h"
 #include "inference_client.h"
+#include "phrase_blocklist.h"
+#include "recent_events.h"
 #include "style_profile.h"
 
 class XTypeEngine : public fcitx::InputMethodEngineV2 {
 public:
     explicit XTypeEngine(fcitx::AddonManager *manager);
     ~XTypeEngine() override;
+
+    const EngineMetrics&      metrics()      const noexcept { return _metrics; }
+    const RecentEventsRing&   recentEvents() const noexcept { return _recent; }
+    const XTypeConfig&        config()       const noexcept { return _cfg; }
+
+    void reloadConfig() override;
 
     void keyEvent(const fcitx::InputMethodEntry &entry,
                   fcitx::KeyEvent &event) override;
@@ -44,6 +55,7 @@ private:
     void invalidate();
     bool isBlocked(const std::string &program) const;
     void harvestSentence(const std::string &program);
+    const AppOverride* currentAppOverride() const;  // nullptr if no override
 
     // Profile lifecycle. _profile is read+written only on the main thread
     // (mutated from event-dispatcher callbacks marshaled from the worker).
@@ -55,6 +67,9 @@ private:
     XTypeConfig                              _cfg;
     ContextBuffer                            _ctx;
     InferenceClient                          _inference;
+    EngineMetrics                            _metrics;
+    RecentEventsRing                         _recent;
+    PhraseBlocklist                          _phraseBlock;
     std::unique_ptr<CorpusCollector>         _corpus;
     std::string                              _userTypedSinceLastTerminator;
     std::unique_ptr<fcitx::EventSourceTime>  _debounceTimer;
@@ -75,6 +90,16 @@ private:
     // XTYPE_PROFILE_REFRESH_SEC (clamped >= 30).
     bool                                     _debugVerbose{false};
     int                                      _profileRefreshSec{300};
+
+    // Latency tracking: rolling window of last 32 inference durations (ms).
+    static constexpr size_t kLatencyWindowSize = 32;
+    std::vector<int>         _latencyWindow;
+    std::time_t              _metricsLastWrite{0};
+    std::time_t              _eventsLastWrite{0};
+
+    void recordLatency(int ms);
+    void writeMetrics();
+    void writeRecentEvents();
 
     static constexpr size_t kUserBufCap        = 2048;
     static constexpr int    kProfileRefreshSec = 300;   // 5 min default

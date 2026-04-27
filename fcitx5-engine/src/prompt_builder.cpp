@@ -38,7 +38,9 @@ std::string buildSystemPrompt(const PromptInputs& in, bool* truncated) {
     if (truncated) *truncated = false;
 
     std::vector<std::string> exemplars;
-    if (in.includeExamples && in.profile && !in.profile->exemplars().empty()) {
+    if (!in.exemplarsOverride.empty()) {
+        exemplars = in.exemplarsOverride;
+    } else if (in.includeExamples && in.profile && !in.profile->exemplars().empty()) {
         exemplars = in.profile->exemplars();
     }
 
@@ -56,8 +58,8 @@ std::string buildSystemPrompt(const PromptInputs& in, bool* truncated) {
     }
     if (out.size() <= in.budgetChars) return out;
 
-    // Still over: truncate userDescription tail. The user description is
-    // capped at 1000 chars upstream (Session 19), so this should be rare.
+    // Still over: truncate userDescription tail.
+    // userDescription is capped at 500 chars in applyPrompt() before reaching here.
     std::string userDesc = in.userDescription;
     while (!userDesc.empty() && out.size() > in.budgetChars) {
         userDesc.pop_back();

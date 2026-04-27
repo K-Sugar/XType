@@ -2,11 +2,15 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cinttypes>
+#include <cmath>
 #include <cstdarg>
 #include <cstdio>
 #include <ctime>
 #include <filesystem>
 #include <string>
+#include <string_view>
+#include <unordered_map>
 #include <utility>
 
 #include <fcitx-utils/eventloopinterface.h>
@@ -19,13 +23,19 @@
 #include <fcitx/instance.h>
 #include <fcitx/text.h>
 
+#include "config_loader.h"
 #include "path_utils.h"
 #include "prompt_builder.h"
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 static FILE *dbg_file() {
-    static FILE *f = std::fopen("/home/saint/Desktop/XType/fcitx5-engine/debug.log", "w");  // truncate on each engine load
+    static FILE *f = []() -> FILE* {
+        auto dir = path_utils::expandTilde("~/.local/share/xtype");
+        std::error_code ec;
+        std::filesystem::create_directories(dir, ec);
+        return std::fopen((dir / "fcitx5.log").c_str(), "a");
+    }();
     return f;
 }
 static void dbg(const char *fmt, ...) {
@@ -49,6 +59,12 @@ XTypeEngine::XTypeEngine(fcitx::AddonManager *manager)
     : _instance(manager->instance()),
       _inference(_cfg.inference)
 {
+    _cfg = config_loader::load();
+    dbg("config loaded: model=%s debounce=%dms engine_enabled=%d",
+        _cfg.inference.model.c_str(),
+        _cfg.inference.debounce_ms,
+        (int)_cfg.behaviour.engine_enabled);
+
     // Observability env reads (once, on the main thread).
     {
         const char* v = std::getenv("XTYPE_DEBUG_VERBOSE");
@@ -70,6 +86,7 @@ XTypeEngine::XTypeEngine(fcitx::AddonManager *manager)
         }
     }
 
+    _phraseBlock.load(_cfg.behaviour.blocked_phrases);
     dbg("XTypeEngine loaded, model=%s", _cfg.inference.model.c_str());
     if (_debugVerbose)
         dbg("[debug] verbose mode ON — sentence content will be written to debug.log");
@@ -108,11 +125,45 @@ XTypeEngine::XTypeEngine(fcitx::AddonManager *manager)
     } else {
         dbg("[corpus] disabled (opt-in; edit config.h LearningConfig::enabled to enable)");
     }
+
+    _inference.update_config(_cfg.inference);
 }
 
 XTypeEngine::~XTypeEngine() {
     if (_profileWorker && _profileWorker->joinable())
         _profileWorker->join();
+}
+
+void XTypeEngine::reloadConfig() {
+    XTypeConfig newCfg = config_loader::load();
+    dbg("[reload] config re-read: model=%s debounce=%dms",
+        newCfg.inference.model.c_str(), newCfg.inference.debounce_ms);
+
+    _phraseBlock.load(newCfg.behaviour.blocked_phrases);
+
+    bool learningWas = _cfg.learning.enabled;
+    bool learningNow = newCfg.learning.enabled;
+    _cfg = newCfg;
+
+    if (learningWas && !learningNow) {
+        _corpus.reset();
+        dbg("[reload] corpus collector disabled");
+    } else if (!learningWas && learningNow && !_cfg.learning.corpus_path.empty()) {
+        _corpus = std::make_unique<CorpusCollector>(_cfg.learning);
+        if (_corpus->disabled()) { _corpus.reset(); log_warn("corpus disabled after reload"); }
+    }
+
+    if (_corpus) {
+        auto cp = path_utils::expandTilde(_cfg.learning.corpus_path);
+        if (!cp.empty() && cp.string().front() != '~') {
+            _corpusPathExpanded  = cp.string();
+            _profilePathExpanded = (cp.parent_path() / "style_profile.json").string();
+        }
+    }
+
+    applyPrompt();
+    _inference.update_config(_cfg.inference);
+    dbg("[reload] done");
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
@@ -122,11 +173,14 @@ void XTypeEngine::activate(const fcitx::InputMethodEntry &,
     auto *ic = event.inputContext();
     const std::string &prog = ic->program();
     dbg("activate prog=%s _lastProg=%s", prog.c_str(), _lastProg.c_str());
-    if (prog != _lastProg)
+    bool appChanged = (prog != _lastProg);
+    if (appChanged)
         resetState(ic);       // app changed: full reset including _ctx
     else
         resetInferenceOnly(); // same app cycling (Zen GTK4 pattern): preserve _ctx
     _lastProg = prog;
+    if (appChanged)
+        applyPrompt();        // re-apply prompt addendum for the new app
 }
 
 void XTypeEngine::deactivate(const fcitx::InputMethodEntry &,
@@ -175,6 +229,13 @@ void XTypeEngine::keyEvent(const fcitx::InputMethodEntry &,
     // Blocklisted apps pass everything through.
     if (isBlocked(ic->program())) return;
 
+    // Per-app override: if enabled is explicitly false, pass through.
+    if (auto* ov = currentAppOverride(); ov && ov->enabled.has_value() && !*ov->enabled)
+        return;
+
+    // Phrase blocklist stub (always false until future session implements matching).
+    if (_phraseBlock.matches(_ctx.contextText())) return;
+
     // Modifier combos (Ctrl / Alt / Super) pass through.
     auto states = event.key().states();
     if (states.testAny(fcitx::KeyStates{fcitx::KeyState::Ctrl,
@@ -193,6 +254,10 @@ void XTypeEngine::keyEvent(const fcitx::InputMethodEntry &,
         std::string committed = acceptAll ? _ctx.acceptAll() : _ctx.acceptNextWord();
         ic->commitString(committed);
         updatePreedit(ic);
+        ++_metrics.suggestions_accepted;
+        _metrics.chars_accepted += committed.size();
+        _recent.set_last_accepted();
+        writeRecentEvents();
         event.filterAndAccept();
         return;
     }
@@ -206,12 +271,21 @@ void XTypeEngine::keyEvent(const fcitx::InputMethodEntry &,
         return;
     }
 
-    // Enter — dismiss suggestion, pass key through.
     if (sym == FcitxKey_Return || sym == FcitxKey_KP_Enter) {
-        if (hasSuggestion) {
-            invalidate();
+        if (hasSuggestion &&
+            _cfg.behaviour.accept_full_key == AcceptKey::Enter) {
+            std::string committed = _ctx.acceptAll();
+            ic->commitString(committed);
             updatePreedit(ic);
+            ++_metrics.suggestions_accepted;
+            _metrics.chars_accepted += committed.size();
+            _recent.set_last_accepted();
+            writeRecentEvents();
+            event.filterAndAccept();
+            return;
         }
+        // Default: dismiss and pass through.
+        if (hasSuggestion) { invalidate(); updatePreedit(ic); }
         if (_corpus && !_userTypedSinceLastTerminator.empty())
             harvestSentence(ic->program());
         return;
@@ -232,6 +306,23 @@ void XTypeEngine::keyEvent(const fcitx::InputMethodEntry &,
         return;
     }
 
+    // Right arrow — accept next word when configured and suggestion active.
+    if (sym == FcitxKey_Right &&
+        _cfg.behaviour.accept_full_key == AcceptKey::Right &&
+        hasSuggestion) {
+        std::string committed = _cfg.behaviour.partial_accept
+                                ? _ctx.acceptNextWord()
+                                : _ctx.acceptAll();
+        ic->commitString(committed);
+        updatePreedit(ic);
+        ++_metrics.suggestions_accepted;
+        _metrics.chars_accepted += committed.size();
+        _recent.set_last_accepted();
+        writeRecentEvents();
+        event.filterAndAccept();
+        return;
+    }
+
     // Printable ASCII (space through ~). Pass key through to app, update buffer,
     // arm debounce timer for inference.
     if (sym >= FcitxKey_space && sym <= FcitxKey_asciitilde) {
@@ -243,15 +334,26 @@ void XTypeEngine::keyEvent(const fcitx::InputMethodEntry &,
         _ctx.appendChar(ch);
 
         // User-typed-only buffer for corpus harvest (excludes AI accept paths).
-        if (_userTypedSinceLastTerminator.size() >= kUserBufCap)
-            _userTypedSinceLastTerminator.erase(0, kUserBufCap / 2);
+        // Rolling strategy: on overflow, erase through the next sentence terminator
+        // so the remainder starts at a clean sentence boundary.
+        if (_userTypedSinceLastTerminator.size() >= kUserBufCap) {
+            auto& buf = _userTypedSinceLastTerminator;
+            size_t pos = buf.find_first_of(".!?", kUserBufCap / 2);
+            if (pos != std::string::npos && pos + 1 < buf.size())
+                buf.erase(0, pos + 1);
+            else
+                buf.clear();
+        }
         _userTypedSinceLastTerminator.push_back(ch);
         if (ch == '.' || ch == '!' || ch == '?')
             harvestSentence(ic->program());
 
         _debounceTimer.reset();
+        int debounceMs = _cfg.inference.debounce_ms;
+        if (auto* ov = currentAppOverride(); ov && ov->debounce_ms.has_value())
+            debounceMs = *ov->debounce_ms;
         uint64_t fireUs = fcitx::now(CLOCK_MONOTONIC) +
-                          static_cast<uint64_t>(_cfg.inference.debounce_ms) * 1000;
+                          static_cast<uint64_t>(debounceMs) * 1000;
         auto icRef = ic->watch();
         auto *icPtr = ic;
         _debounceTimer = _instance->eventLoop().addTimeEvent(
@@ -281,11 +383,18 @@ void XTypeEngine::requestInference(
                          static_cast<size_t>(_cfg.inference.context_window));
 
     ++_gen;
+    ++_metrics.suggestions_generated;
     const uint64_t myGen = _gen;
+    const auto     startUs = fcitx::now(CLOCK_MONOTONIC);
+
+    InferenceConfig reqCfg = _cfg.inference;
+    if (auto* ov = currentAppOverride(); ov && ov->num_predict.has_value())
+        reqCfg.num_predict = *ov->num_predict;
 
     dbg("requestInference ctx='%.40s...'", ctx.c_str());
     _inference.request(
         std::move(ctx),
+        std::move(reqCfg),
         [this, myGen, icRef, icPtr](std::string token) {
             dbg("token received: '%s' icValid=%d", token.c_str(), (int)icRef.isValid());
             if (!icRef.isValid()) { dbg("on_token: icRef invalid — dropping"); return; }
@@ -300,11 +409,11 @@ void XTypeEngine::requestInference(
                     updatePreedit(icPtr);
                 });
         },
-        [this, myGen, icRef, icPtr]() {
+        [this, myGen, icRef, icPtr, startUs]() {
             dbg("inference done, myGen=%llu curGen=%llu", (unsigned long long)myGen, (unsigned long long)_gen);
             _instance->eventDispatcher().scheduleWithContext(
                 icRef,
-                [this, myGen, icPtr]() {
+                [this, myGen, icPtr, startUs]() {
                     if (myGen != _gen) return;
                     if (_ctx.hasSuggestion()) {
                         std::string s = *_ctx.suggestion();
@@ -312,12 +421,12 @@ void XTypeEngine::requestInference(
                         while (!s.empty() &&
                                std::isspace(static_cast<unsigned char>(s.back())))
                             s.pop_back();
-                        const std::string ctx = _ctx.contextText();
+                        const std::string ctxText = _ctx.contextText();
                         // Strip tail-of-context echo: model repeats recently typed text.
                         constexpr size_t kMaxCheck = 80;
-                        size_t check = std::min({s.size(), ctx.size(), kMaxCheck});
+                        size_t check = std::min({s.size(), ctxText.size(), kMaxCheck});
                         for (size_t len = check; len >= 4; --len) {
-                            if (ctx.compare(ctx.size() - len, len, s, 0, len) == 0) {
+                            if (ctxText.compare(ctxText.size() - len, len, s, 0, len) == 0) {
                                 s.erase(0, len);
                                 break;
                             }
@@ -327,18 +436,33 @@ void XTypeEngine::requestInference(
                         // Case-insensitive match on the first 12 chars is enough to
                         // identify this pattern without false-positives on short words.
                         constexpr size_t kHeadCheck = 12;
-                        if (!s.empty() && s.size() >= kHeadCheck && ctx.size() >= kHeadCheck) {
+                        if (!s.empty() && s.size() >= kHeadCheck && ctxText.size() >= kHeadCheck) {
                             auto lower = [](std::string t) {
                                 std::transform(t.begin(), t.end(), t.begin(),
                                                [](unsigned char c){ return std::tolower(c); });
                                 return t;
                             };
-                            if (lower(s.substr(0, kHeadCheck)) == lower(ctx.substr(0, kHeadCheck)))
+                            if (lower(s.substr(0, kHeadCheck)) == lower(ctxText.substr(0, kHeadCheck)))
                                 s.clear();
                         }
                         _ctx.setSuggestion(std::move(s));
                     }
                     updatePreedit(icPtr);
+                    const auto endUs = fcitx::now(CLOCK_MONOTONIC);
+                    recordLatency(static_cast<int>((endUs - startUs) / 1000));
+                    if (_ctx.hasSuggestion()) {
+                        RecentEvent ev;
+                        const std::string ctxText = _ctx.contextText();
+                        ev.typed      = ctxText.substr(
+                                           static_cast<size_t>(std::max(0, (int)ctxText.size() - 40)));
+                        ev.ghost      = _ctx.suggestion() ? *_ctx.suggestion() : "";
+                        ev.app        = icPtr->program();
+                        ev.accepted   = false;
+                        ev.latency_ms = static_cast<int>((endUs - startUs) / 1000);
+                        ev.ts         = std::time(nullptr);
+                        _recent.push(ev);
+                        writeRecentEvents();
+                    }
                 });
         },
         [](std::string err) { dbg("inference error: %s", err.c_str()); }
@@ -390,9 +514,32 @@ void XTypeEngine::invalidate() {
 bool XTypeEngine::isBlocked(const std::string &program) const {
     std::string prog_lower = program;
     std::transform(prog_lower.begin(), prog_lower.end(), prog_lower.begin(), ::tolower);
-    for (const auto &app : _cfg.behaviour.blocklist_apps)
-        if (prog_lower.find(app) != std::string::npos) return true;
+
+    for (const auto &entry : _cfg.behaviour.blocklist_apps) {
+        if (entry.empty()) continue;
+        // Match only complete components; separators are '.' and '_' (reverse-domain-name style).
+        // Prevents "konsole" from matching "konsoleboard" or "kate" matching "kate-beta".
+        auto pos = prog_lower.find(entry);
+        while (pos != std::string::npos) {
+            auto after = pos + entry.size();
+            bool startOk = (pos == 0) || prog_lower[pos - 1] == '.' || prog_lower[pos - 1] == '_';
+            bool endOk   = (after == prog_lower.size())
+                         || prog_lower[after] == '.' || prog_lower[after] == '_';
+            if (startOk && endOk) return true;
+            pos = prog_lower.find(entry, pos + 1);
+        }
+    }
     return false;
+}
+
+const AppOverride* XTypeEngine::currentAppOverride() const {
+    auto it = _cfg.apps.find(_lastProg);
+    if (it != _cfg.apps.end()) return &it->second;
+    std::string lower = _lastProg;
+    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+    it = _cfg.apps.find(lower);
+    if (it != _cfg.apps.end()) return &it->second;
+    return nullptr;
 }
 
 void XTypeEngine::harvestSentence(const std::string &program) {
@@ -424,6 +571,103 @@ void XTypeEngine::harvestSentence(const std::string &program) {
     _corpus->record(std::move(s));
 }
 
+// ── Observability (E2) ────────────────────────────────────────────────────────
+
+void XTypeEngine::recordLatency(int ms) {
+    if (_latencyWindow.size() >= kLatencyWindowSize)
+        _latencyWindow.erase(_latencyWindow.begin());
+    _latencyWindow.push_back(ms);
+
+    std::vector<int> sorted = _latencyWindow;
+    std::sort(sorted.begin(), sorted.end());
+    size_t n = sorted.size();
+    _metrics.latency_p50_ms.store(sorted[n / 2]);
+    _metrics.latency_p95_ms.store(sorted[std::min(n - 1, static_cast<size_t>(n * 0.95))]);
+
+    writeMetrics();
+}
+
+void XTypeEngine::writeMetrics() {
+    std::time_t now = std::time(nullptr);
+    if (now == _metricsLastWrite) return;
+    _metricsLastWrite = now;
+
+    auto dir = path_utils::expandTilde("~/.local/share/xtype");
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    auto tmp = (dir / "metrics.json.tmp").string();
+    auto dst = (dir / "metrics.json").string();
+
+    char buf[512];
+    std::snprintf(buf, sizeof(buf),
+        "{\"latency_p50_ms\":%d,\"latency_p95_ms\":%d,"
+        "\"suggestions_generated\":%" PRIu64 ","
+        "\"suggestions_accepted\":%" PRIu64 ","
+        "\"chars_accepted\":%" PRIu64 ","
+        "\"updated_at\":%" PRId64 "}\n",
+        _metrics.latency_p50_ms.load(),
+        _metrics.latency_p95_ms.load(),
+        static_cast<uint64_t>(_metrics.suggestions_generated.load()),
+        static_cast<uint64_t>(_metrics.suggestions_accepted.load()),
+        static_cast<uint64_t>(_metrics.chars_accepted.load()),
+        static_cast<int64_t>(now));
+
+    if (FILE* f = std::fopen(tmp.c_str(), "w")) {
+        std::fputs(buf, f);
+        std::fclose(f);
+        std::rename(tmp.c_str(), dst.c_str());
+    }
+}
+
+void XTypeEngine::writeRecentEvents() {
+    std::time_t now = std::time(nullptr);
+    if (now == _eventsLastWrite) return;
+    _eventsLastWrite = now;
+
+    auto dir = path_utils::expandTilde("~/.local/share/xtype");
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    auto tmp = (dir / "recent_events.json.tmp").string();
+    auto dst = (dir / "recent_events.json").string();
+
+    auto esc = [](std::string_view s) {
+        std::string out;
+        for (char c : s) {
+            if (c == '"')       out += "\\\"";
+            else if (c == '\\') out += "\\\\";
+            else if (c == '\n') out += "\\n";
+            else                out += c;
+        }
+        return out;
+    };
+
+    auto snap = _recent.snapshot();
+    std::string json = "[\n";
+    bool first = true;
+    for (const auto& ev : snap) {
+        if (!first) json += ",\n";
+        first = false;
+        char entry[1024];
+        std::snprintf(entry, sizeof(entry),
+            "  {\"typed\":\"%s\",\"ghost\":\"%s\",\"app\":\"%s\","
+            "\"accepted\":%s,\"latency_ms\":%d,\"ts\":%" PRId64 "}",
+            esc(ev.typed).c_str(),
+            esc(ev.ghost).c_str(),
+            esc(ev.app).c_str(),
+            ev.accepted ? "true" : "false",
+            ev.latency_ms,
+            static_cast<int64_t>(ev.ts));
+        json += entry;
+    }
+    json += "\n]\n";
+
+    if (FILE* f = std::fopen(tmp.c_str(), "w")) {
+        std::fputs(json.c_str(), f);
+        std::fclose(f);
+        std::rename(tmp.c_str(), dst.c_str());
+    }
+}
+
 // ── Personalization (Session 17) ──────────────────────────────────────────────
 
 void XTypeEngine::applyPrompt() {
@@ -432,13 +676,65 @@ void XTypeEngine::applyPrompt() {
     in.profile         = _profile.get();
     in.includeExamples = _cfg.learning.include_examples_in_prompt;
     in.budgetChars     = kPromptBudget;
+
+    in.userDescription = _cfg.user_prompt.description;
+    in.avoidPhrases    = _cfg.user_prompt.avoid_phrases;
+
+    // Cap user description at 500 chars to keep within prompt budget.
+    // The budget enforcer in buildSystemPrompt truncates at character level;
+    // truncating at a higher level here ensures the description ends on a
+    // word boundary.
+    static constexpr size_t kMaxDescLen = 500;
+    if (in.userDescription.size() > kMaxDescLen) {
+        size_t cut = in.userDescription.rfind(' ', kMaxDescLen);
+        in.userDescription.resize(cut != std::string::npos ? cut : kMaxDescLen);
+        log_warn("user description truncated to fit prompt budget");
+    }
+
+    // voice_strength: 0 = no exemplars, 100 = all, 1–99 = proportional slice.
+    if (_profile && !_profile->exemplars().empty() && in.includeExamples) {
+        const auto& all = _profile->exemplars();
+        size_t count = static_cast<size_t>(
+            std::ceil(all.size() * std::clamp(_cfg.learning.voice_strength, 0, 100) / 100.0));
+        if (count == 0) {
+            in.includeExamples = false;
+        } else if (count < all.size()) {
+            in.exemplarsOverride = std::vector<std::string>(all.begin(), all.begin() + count);
+        }
+        // count == all.size(): use default path (exemplarsOverride empty)
+    }
+
+    // Tone: append a short style modifier when a non-default tone is set.
+    if (!_cfg.user_prompt.tone.empty() && _cfg.user_prompt.tone != "default") {
+        static const std::unordered_map<std::string, const char*> kToneMap = {
+            {"technical",    " Prefer precise technical terminology."},
+            {"casual",       " Use a relaxed, conversational tone."},
+            {"professional", " Use formal, professional language."},
+            {"concise",      " Be brief and direct."},
+        };
+        auto it = kToneMap.find(_cfg.user_prompt.tone);
+        if (it != kToneMap.end())
+            in.base += it->second;
+    }
+
+    // Per-app prompt addendum — only applied when an active app is known.
+    if (!_lastProg.empty()) {
+        if (auto* ov = currentAppOverride();
+            ov && ov->prompt_addendum.has_value() && !ov->prompt_addendum->empty()) {
+            in.base += "\n" + *ov->prompt_addendum;
+        }
+    }
+
     bool truncated = false;
     auto prompt = buildSystemPrompt(in, &truncated);
     if (truncated)
         log_warn("system prompt truncated to fit 2000-char budget");
     size_t exCount = _profile ? _profile->exemplars().size() : (size_t)0;
-    dbg("[prompt] set %zu chars exemplars=%zu truncated=%d",
-        prompt.size(), exCount, truncated ? 1 : 0);
+    dbg("[prompt] set %zu chars exemplars=%zu desc_len=%zu avoid=%zu truncated=%d",
+        prompt.size(), exCount,
+        in.userDescription.size(),
+        in.avoidPhrases.size(),
+        truncated ? 1 : 0);
     _inference.set_system_prompt(std::move(prompt));
 }
 

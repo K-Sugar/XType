@@ -145,6 +145,45 @@ TEST_CASE("truncation flag false when within budget", "[prompt][budget]") {
     REQUIRE_FALSE(truncated);
 }
 
+TEST_CASE("user description appears in prompt") {
+    PromptInputs in;
+    in.base = "Base prompt.";
+    in.userDescription = "A software engineer.";
+    in.budgetChars = 2000;
+    auto p = buildSystemPrompt(in);
+    REQUIRE(p.find("A software engineer.") != std::string::npos);
+}
+
+TEST_CASE("avoid phrases appear in prompt") {
+    PromptInputs in;
+    in.base = "Base.";
+    in.avoidPhrases = {"synergy", "leverage"};
+    in.budgetChars = 2000;
+    auto p = buildSystemPrompt(in);
+    REQUIRE(p.find("synergy") != std::string::npos);
+    REQUIRE(p.find("leverage") != std::string::npos);
+}
+
+TEST_CASE("prompt respects budget") {
+    PromptInputs in;
+    in.base = std::string(1800, 'x');
+    in.userDescription = std::string(300, 'y');
+    in.budgetChars = 2000;
+    bool truncated = false;
+    auto p = buildSystemPrompt(in, &truncated);
+    REQUIRE(p.size() <= 2000);
+    REQUIRE(truncated);
+}
+
+TEST_CASE("exemplarsOverride takes precedence over profile") {
+    PromptInputs in;
+    in.base = "Base.";
+    in.exemplarsOverride = {"only this exemplar"};
+    in.budgetChars = 2000;
+    auto p = buildSystemPrompt(in);
+    REQUIRE(p.find("only this exemplar") != std::string::npos);
+}
+
 TEST_CASE("drops all exemplars before truncating description", "[prompt][budget]") {
     auto sp = profileWith({
         std::string(400, 'a') + " sentence ends here",

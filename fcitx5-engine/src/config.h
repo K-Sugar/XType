@@ -1,7 +1,12 @@
 #pragma once
 
+#include <map>
+#include <optional>
 #include <string>
 #include <vector>
+
+enum class TriggerMode { Pause, Manual };
+enum class AcceptKey   { Tab, Enter, Right };
 
 struct InferenceConfig {
     std::string              model             = "qwen2.5:1.5b";
@@ -13,28 +18,53 @@ struct InferenceConfig {
     float                    temperature       = 0.3f;
     float                    top_p             = 0.9f;
     std::vector<std::string> stop_tokens       = {".", "!", "?", "\n"};
+    std::optional<int>       threads;            // unset = let Ollama decide
 };
 
 struct BehaviourConfig {
-    bool                     tab_accepts_word      = true;
-    bool                     passthrough_terminals = true;
-    std::vector<std::string> blocklist_apps        = {
+    bool                     engine_enabled       = true;
+    TriggerMode              trigger_mode         = TriggerMode::Pause;
+    AcceptKey                accept_full_key      = AcceptKey::Tab;
+    bool                     partial_accept       = true;   // renamed from tab_accepts_word
+    bool                     esc_dismisses        = true;
+    bool                     passthrough_terminals= true;
+    std::vector<std::string> blocklist_apps       = {
         "konsole", "alacritty",
         "keepassxc", "1password", "bitwarden", "gnome-keyring", "seahorse"
     };
+    std::vector<std::string> blocked_phrases      = {};
 };
 
 struct LearningConfig {
-    bool        enabled                    = false;  // OPT-IN: default off
+    bool        enabled                    = false;
     std::string corpus_path                = "~/.local/share/xtype/corpus.txt";
     int         flush_interval_sec         = 60;
     int         max_corpus_mb              = 50;
     int         min_sentence_chars         = 12;
-    bool        include_examples_in_prompt = true;   // suppress exemplars without disabling collection
+    bool        include_examples_in_prompt = true;
+    int         voice_strength             = 50;   // 0-100; engine does not read yet (comingSoon)
+    int         forget_after_days          = 0;    // 0 = disabled; engine does not read yet (comingSoon)
+};
+
+struct UserPromptConfig {
+    std::string              description;
+    std::vector<std::string> avoid_phrases;
+    std::string              tone;
+};
+
+struct AppOverride {
+    std::optional<bool>        enabled;
+    std::optional<std::string> model;
+    std::optional<int>         debounce_ms;
+    std::optional<int>         num_predict;
+    std::optional<std::string> mode;            // Default/Code-aware/Email tone/Casual/Off
+    std::optional<std::string> prompt_addendum;
 };
 
 struct XTypeConfig {
-    InferenceConfig inference;
-    BehaviourConfig behaviour;
-    LearningConfig  learning;
+    InferenceConfig                         inference;
+    BehaviourConfig                         behaviour;
+    LearningConfig                          learning;
+    UserPromptConfig                        user_prompt;
+    std::map<std::string, AppOverride>      apps;
 };

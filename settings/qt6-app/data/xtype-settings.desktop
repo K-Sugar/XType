@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=XType Settings
+Comment=Configure ghost-text autocomplete
+Exec=xtype-settings
+Icon=xtype
+Terminal=false
+Type=Application
+Categories=Settings;Qt;
+StartupNotify=true
+StartupWMClass=xtype-settings

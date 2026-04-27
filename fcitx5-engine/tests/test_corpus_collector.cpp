@@ -1,8 +1,10 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -164,6 +166,63 @@ TEST_CASE("destructor flushes pending entries", "[corpus][shutdown]") {
     auto contents = readAll(p);
     REQUIRE(contents.find("destruction must flush this entry to disk") != std::string::npos);
     fs::remove_all(p.parent_path());
+}
+
+TEST_CASE("pruneOldEntries removes entries older than N days", "[corpus][prune]") {
+    auto dir = fs::temp_directory_path() /
+               ("xtype_test_prune_" +
+                std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    fs::create_directories(dir);
+    auto cp = dir / "corpus.txt";
+    auto tp = dir / "corpus_timestamps.txt";
+
+    std::time_t now   = std::time(nullptr);
+    std::time_t old   = now - 10 * 86400;  // 10 days ago
+
+    {
+        std::ofstream cf(cp);
+        std::ofstream tf(tp);
+        cf << "old sentence one here\n";   tf << old  << '\n';
+        cf << "old sentence two here\n";   tf << old  << '\n';
+        cf << "recent sentence three\n";   tf << now  << '\n';
+        cf << "recent sentence four\n";    tf << now  << '\n';
+    }
+
+    CorpusCollector::pruneOldEntries(cp, 7);
+
+    std::ifstream cf2(cp);
+    std::string contents((std::istreambuf_iterator<char>(cf2)),
+                          std::istreambuf_iterator<char>());
+    REQUIRE(contents.find("old sentence") == std::string::npos);
+    REQUIRE(contents.find("recent sentence three") != std::string::npos);
+    REQUIRE(contents.find("recent sentence four")  != std::string::npos);
+
+    fs::remove_all(dir);
+}
+
+TEST_CASE("pruneOldEntries is no-op when days == 0", "[corpus][prune]") {
+    auto dir = fs::temp_directory_path() /
+               ("xtype_test_prune0_" +
+                std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    fs::create_directories(dir);
+    auto cp = dir / "corpus.txt";
+    auto tp = dir / "corpus_timestamps.txt";
+
+    std::time_t old = std::time(nullptr) - 100 * 86400;
+    {
+        std::ofstream cf(cp);
+        std::ofstream tf(tp);
+        cf << "very old sentence here\n"; tf << old << '\n';
+    }
+
+    CorpusCollector::pruneOldEntries(cp, 0);
+
+    std::ifstream cf2(cp);
+    std::string contents((std::istreambuf_iterator<char>(cf2)),
+                          std::istreambuf_iterator<char>());
+    REQUIRE(contents.find("very old sentence here") != std::string::npos);
+
+    fs::remove_all(dir);
 }
 
 TEST_CASE("parent directory is created if missing", "[corpus][fs]") {

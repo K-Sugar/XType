@@ -1,0 +1,45 @@
+[inference]
+model = "llama3:8b"
+ollama_host = "http://192.168.1.10:11434"
+debounce_ms = 400
+min_context_chars = 20
+context_window = 300
+num_predict = 15
+temperature = 0.7
+top_p = 0.8
+stop_tokens = [".", "\n"]
+threads = 4
+
+[behaviour]
+engine_enabled = false
+trigger_mode = "manual"
+accept_full_key = "enter"
+partial_accept = false
+esc_dismisses = false
+passthrough_terminals = false
+blocklist_apps = ["kate", "subl"]
+blocked_phrases = ["pursuant to", "hereinafter"]
+
+[learning]
+enabled = true
+corpus_path = "~/.local/share/xtype/corpus2.txt"
+flush_interval_sec = 120
+max_corpus_mb = 25
+min_sentence_chars = 8
+include_examples_in_prompt = false
+voice_strength = 80
+forget_after_days = 14
+
+[user_prompt]
+description = "A senior software engineer who writes tersely."
+tone = "technical"
+avoid_phrases = ["synergy", "leverage"]
+
+[apps.kate]
+enabled = false
+mode = "code-aware"
+num_predict = 20
+debounce_ms = 100
+
+[apps."org.kde.konsole"]
+enabled = false

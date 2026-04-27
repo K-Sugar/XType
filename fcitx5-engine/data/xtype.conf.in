@@ -4,3 +4,4 @@ Comment=AI inline autocomplete via Ollama
 Category=InputMethod
 Type=SharedLibrary
 Library=@ADDON_LIB@
+Configurable=True

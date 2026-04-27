@@ -6,10 +6,19 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <string_view>
+#include <system_error>
 
 static FILE *ic_logfile() {
-    static FILE *f = std::fopen("/home/saint/Desktop/XType/fcitx5-engine/thread.log", "w");
+    static FILE *f = []() -> FILE* {
+        const char* home = std::getenv("HOME");
+        if (!home || !*home) return nullptr;
+        std::string dir = std::string(home) + "/.local/share/xtype";
+        std::error_code ec;
+        std::filesystem::create_directories(dir, ec);
+        return std::fopen((dir + "/inference.log").c_str(), "a");
+    }();
     return f;
 }
 static void iclog(const char *fmt, ...) {
@@ -72,12 +81,6 @@ static std::string json_str(std::string_view json, std::string_view key) {
     return result;
 }
 
-static bool json_bool(std::string_view json, std::string_view key) {
-    std::string needle;
-    needle += '"'; needle += key; needle += "\":true";
-    return json.find(needle) != std::string_view::npos;
-}
-
 // ── Payload builder ───────────────────────────────────────────────────────────
 
 static std::string build_payload(const InferenceConfig& cfg,
@@ -111,7 +114,7 @@ static std::string build_payload(const InferenceConfig& cfg,
     // Assistant-prefill: context is placed in an incomplete assistant turn.
     // The model continues its own text, bypassing the chat-response pattern that
     // fires when conversational text appears in the user role.
-    return std::string(R"({"model":")") + json_escape(cfg.model)
+    std::string payload = std::string(R"({"model":")") + json_escape(cfg.model)
          + R"(","messages":[)"
          + R"({"role":"system","content":")"    + json_escape(system_prompt) + R"("},)"
          + R"({"role":"assistant","content":")" + json_escape(context) + R"("})"
@@ -119,7 +122,13 @@ static std::string build_payload(const InferenceConfig& cfg,
          + std::to_string(cfg.num_predict)
          + R"(,"temperature":)" + temp_buf
          + R"(,"top_p":)"      + top_p_buf
-         + R"(,"stop":)"       + stop_arr + "}}";
+         + R"(,"stop":)"       + stop_arr;
+
+    if (cfg.threads.has_value())
+        payload += R"(,"num_thread":)" + std::to_string(*cfg.threads);
+
+    payload += "}}";
+    return payload;
 }
 
 // ── CURL write callbacks ──────────────────────────────────────────────────────
@@ -190,6 +199,11 @@ std::string_view InferenceClient::base_system_prompt() {
     return std::string_view(kBaseSystemPrompt);
 }
 
+void InferenceClient::update_config(const InferenceConfig& cfg) {
+    std::lock_guard<std::mutex> lk(_mutex);
+    _cfg = cfg;
+}
+
 InferenceClient::~InferenceClient() {
     ++_gen;  // abort any in-flight request
     {
@@ -202,12 +216,12 @@ InferenceClient::~InferenceClient() {
     curl_global_cleanup();
 }
 
-void InferenceClient::request(std::string context, TokenCb on_token,
-                              DoneCb on_done, ErrCb on_error) {
+void InferenceClient::request(std::string context, InferenceConfig cfg,
+                              TokenCb on_token, DoneCb on_done, ErrCb on_error) {
     uint64_t gen = ++_gen;
     {
         std::lock_guard<std::mutex> lk(_mutex);
-        _pending = Req{std::move(context), gen,
+        _pending = Req{std::move(context), std::move(cfg), gen,
                        std::move(on_token), std::move(on_done), std::move(on_error)};
     }
     _cv.notify_one();
@@ -275,8 +289,8 @@ void InferenceClient::execute(Req& req) {
         prompt_snapshot = _system_prompt;  // frozen for this request
     }
 
-    std::string payload = build_payload(_cfg, req.context, prompt_snapshot);
-    std::string url     = _cfg.ollama_host + "/api/chat";
+    std::string payload = build_payload(req.cfg, req.context, prompt_snapshot);
+    std::string url     = req.cfg.ollama_host + "/api/chat";
 
     WriteState ws(req.gen, _gen, req.on_token);
 

@@ -201,8 +201,12 @@ python -m engine.main
 
 ## 5. Configuration
 
-XType reads `~/.config/xtype/config.toml` (created on first launch with sane
-defaults). All keys are optional.
+**Recommended:** use the `xtype-settings` GUI app (see `settings/qt6-app/README.md`).
+It writes `~/.config/xtype/config.toml` automatically and shows a reload banner
+when changes need to be applied.
+
+**CLI fallback:** edit `~/.config/xtype/config.toml` directly (created on first launch
+with sane defaults). All keys are optional.
 
 ```toml
 [inference]
