@@ -8,11 +8,10 @@ Inline ghost-text completions powered by a local LLM, delivered through the
 Wayland-native input method framework. No cloud, no telemetry, just a clean and simple
 Fcitx5 engine that works in every text field on your desktop.
 
-[![Status](https://img.shields.io/badge/status-phase%20B%20%E2%80%94%20fcitx5%20production-blue)]()
+[![Status](https://img.shields.io/badge/status-v1.0.0%20%E2%80%94%20production-blue)]()
 [![Platform](https://img.shields.io/badge/platform-Linux%20%E2%80%A2%20Wayland%20%E2%80%A2%20KDE-1793D1)]()
 [![License](https://img.shields.io/badge/license-MIT-green)]()
 [![C++](https://img.shields.io/badge/C%2B%2B-20-00599C?logo=cplusplus&logoColor=white)]()
-[![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)]()
 [![Model](https://img.shields.io/badge/model-Qwen2.5%201.5B-7C3AED)]()
 
 </div>
@@ -49,10 +48,9 @@ whole suggestion, `Esc` to dismiss it. Everything happens on-device, on your CPU
 or GPU, with the model held in roughly **1–2 GB of RAM** and a target
 **time-to-first-token under 200 ms**.
 
-It is implemented as a native input method engine — first as a Python IBus
-prototype, then re-engineered in C++ as a production Fcitx5 addon — so it works
-across GTK, Qt, Electron and SDL applications without ever touching the
-keyboard, the X server, or the network.
+It is implemented as a native Fcitx5 input method engine so it works across
+GTK, Qt, Electron and SDL applications without ever touching the keyboard,
+the X server, or the network.
 
 ---
 
@@ -73,16 +71,6 @@ input methods are first-class citizens with full rights to render *preedit
 text* (ghost text) inline in the focused field. That is the opening XType walks
 through.
 
-The project is built in two phases:
-
-| Phase | Stack         | Purpose                                                |
-|------:|---------------|--------------------------------------------------------|
-| **A** | Python + IBus | Rapid prototyping of the engine logic and UX           |
-| **B** | C++20 + Fcitx5 | Production-quality addon, native Breeze integration   |
-
-The two engines share one design and one set of behaviours; the C++ port is a
-near 1:1 translation of the Python reference.
-
 ---
 
 ## 3. Features
@@ -94,7 +82,7 @@ near 1:1 translation of the Python reference.
 - **Streaming** with cancel-on-new-keystroke, so a stale request never paints
   over your fresh typing.
 - **Word-by-word acceptance** (`Tab`) or full-suggestion acceptance
-  (`Shift+Tab`).
+  (`Shift+Tab`). Accept key is configurable: Tab, Enter, or →.
 - **Sub-200 ms time-to-first-token** target, measured with the included
   benchmark script.
 - **Per-app blocklist** — terminals (Konsole, Alacritty), password managers
@@ -107,8 +95,24 @@ near 1:1 translation of the Python reference.
 - **Anti-loop chat format** — uses `assistant`-prefill messaging on Ollama's
   `/api/chat` endpoint so the model continues your text instead of replying
   to it.
+- **`xtype-settings` Qt6/QML app** — full settings interface for all engine
+  options, accessible from KDE application menus; writes
+  `~/.config/xtype/config.toml` and shows a reload banner when changes need
+  to be applied.
+- **Personalisation** — opt-in writing corpus (`~/.local/share/xtype/corpus.txt`),
+  style profile extraction, voice-match strength slider (0–100), and a
+  forget-after-days rolling window to keep the profile fresh automatically.
+- **User voice profile** — free-text description (≤ 500 chars), tone selector
+  (Default / Casual / Professional / Technical / Concise), and a per-phrase
+  avoid list — all injected into the system prompt.
+- **Per-app overrides** — independently configure suggestion length, mode,
+  debounce, and a prompt addendum per application.
+- **Live observability** — engine writes `metrics.json` and `recent_events.json`
+  after every inference; the sidebar shows acceptance rate, latency p50/p95,
+  and a recent-events log without a page reload.
 - **Privacy by design** — no telemetry, no cloud, no analytics, no auto-update
-  ping.
+  ping. Password managers are permanently hard-blocked from corpus collection;
+  AI suggestions never enter the corpus.
 
 ---
 
@@ -123,13 +127,7 @@ near 1:1 translation of the Python reference.
 sudo pacman -S \
   fcitx5 fcitx5-configtool fcitx5-qt fcitx5-gtk fcitx5-breeze \
   cmake ninja gcc pkgconf curl \
-  ollama python uv
-```
-
-For the IBus development prototype, additionally:
-
-```bash
-sudo pacman -S ibus
+  ollama
 ```
 
 ### 4.2 Pull the language model
@@ -162,7 +160,21 @@ This installs:
 - `/usr/share/fcitx5/addon/xtype.conf`
 - `/usr/share/fcitx5/inputmethod/xtype.conf`
 
-### 4.4 Wire input method environment variables
+### 4.4 Build & install the settings app
+
+```bash
+cmake -B settings/qt6-app/build -G Ninja -S settings/qt6-app
+ninja -C settings/qt6-app/build
+sudo ninja -C settings/qt6-app/build install   # installs xtype-settings + .desktop
+```
+
+Or run it directly without installing:
+
+```bash
+./settings/qt6-app/build/xtype-settings
+```
+
+### 4.5 Wire input method environment variables
 
 `~/.config/environment.d/input-method.conf`:
 
@@ -172,7 +184,7 @@ GTK_IM_MODULE=fcitx
 XMODIFIERS=@im=fcitx
 ```
 
-### 4.5 Activate Fcitx5 inside KWin
+### 4.6 Activate Fcitx5 inside KWin
 
 KDE Plasma on Wayland requires that Fcitx5 be **launched by KWin** — not as a
 standalone autostart daemon. Open:
@@ -182,20 +194,6 @@ standalone autostart daemon. Open:
 Then disable any IBus autostart entry to avoid conflicts, log out, and log back
 in. Verify with `fcitx5-configtool` that **XType** appears in your enabled
 input methods.
-
-### 4.6 Run the IBus prototype (development only)
-
-```bash
-cd XType/ibus-engine
-uv venv
-source .venv/bin/activate.fish      # fish; use activate for bash/zsh
-uv pip install -e ".[dev]"
-python -m pytest tests/
-
-# Launch a session-scoped IBus daemon with the engine
-ibus-daemon --replace --xim &
-python -m engine.main
-```
 
 ---
 
@@ -221,22 +219,44 @@ top_p              = 0.9
 stop_tokens        = [".", "!", "?", "\n"]
 
 [behaviour]
-tab_accepts_word      = true
-passthrough_terminals = true
-blocklist_apps        = ["konsole", "alacritty", "keepassxc", "1password"]
+engine_enabled      = true
+accept_full_key     = "tab"    # "tab" | "enter" | "right"
+partial_accept      = true
+esc_dismisses       = true
+blocklist_apps      = ["konsole", "alacritty", "keepassxc", "1password"]
+
+[learning]
+enabled             = false    # opt-in
+corpus_path         = "~/.local/share/xtype/corpus.txt"
+voice_strength      = 50       # 0–100
+forget_after_days   = 0        # 0 = disabled
+
+[user_prompt]
+description         = ""       # ≤ 500 chars; injected into system prompt
+tone                = ""       # "casual" | "professional" | "technical" | "concise"
+avoid_phrases       = []
+
+[apps.firefox]                 # per-app override example
+num_predict         = 20
+mode                = "Default"
 ```
 
-| Key                          | Effect                                                                        |
-|------------------------------|-------------------------------------------------------------------------------|
-| `model`                      | Any model installed in Ollama. `qwen2.5:0.5b` is faster, `1.5b` is sharper.   |
-| `debounce_ms`                | Idle time before a request is fired. Lower = snappier, higher = less load.    |
-| `min_context_chars`          | Minimum buffered characters before the engine asks for a suggestion.          |
-| `context_window`             | Sliding-window size (chars) handed to the model as prefill.                   |
-| `blocklist_apps`             | Case-insensitive substring match against `ic->program()`.                     |
-| `passthrough_terminals`      | Convenience flag — when `true`, common terminals are always skipped.          |
+| Key                          | Effect                                                                              |
+|------------------------------|-------------------------------------------------------------------------------------|
+| `model`                      | Any model installed in Ollama. `qwen2.5:0.5b` is faster, `1.5b` is sharper.        |
+| `debounce_ms`                | Idle time before a request is fired. Lower = snappier, higher = less load.         |
+| `accept_full_key`            | Which key accepts the full suggestion: `"tab"`, `"enter"`, or `"right"`.           |
+| `partial_accept`             | When `true`, the accept key commits one word at a time; `Shift+key` commits all.   |
+| `min_context_chars`          | Minimum buffered characters before the engine asks for a suggestion.               |
+| `context_window`             | Sliding-window size (chars) handed to the model as prefill.                        |
+| `blocklist_apps`             | Case-insensitive component match against `ic->program()`.                          |
+| `learning.voice_strength`    | 0 = no corpus examples in prompt; 100 = all exemplars included; proportional.     |
+| `learning.forget_after_days` | Prune corpus entries older than N days. 0 disables pruning.                        |
+| `user_prompt.description`    | Free-text description of yourself injected into the system prompt (≤ 500 chars).   |
 
-Logs are written to `~/.local/share/xtype/engine.log` (IBus) and
-`fcitx5-engine/debug.log` (Fcitx5 dev build) for post-mortem analysis.
+Logs are written to `~/.local/share/xtype/fcitx5.log` (engine debug) and
+`~/.local/share/xtype/inference.log` (inference requests). Both are viewable in
+the LogTail panel in `xtype-settings`.
 
 ---
 
@@ -253,15 +273,6 @@ Logs are written to `~/.local/share/xtype/engine.log` (IBus) and
 | libcurl     | ≥ 7.80     | HTTP streaming to Ollama                             |
 | Qwen 2.5    | 1.5B Q4_K_M | Default model (~1 GB on disk, ~1.5 GB resident)     |
 
-For the IBus prototype:
-
-| Dependency  | Version | Why                                            |
-|-------------|---------|------------------------------------------------|
-| IBus        | ≥ 1.5   | Development input method                       |
-| Python      | ≥ 3.12  | `tomllib` is stdlib, asyncio improvements      |
-| `aiohttp`   | ≥ 3.9   | Async streaming HTTP to Ollama                 |
-| PyGObject   | system  | IBus bindings via GObject introspection        |
-
 ### 6.2 Build-time
 
 - **CMake** ≥ 3.19
@@ -272,8 +283,7 @@ For the IBus prototype:
 
 ### 6.3 Development
 
-- `pytest` ≥ 8.0, `pytest-asyncio` ≥ 0.23 — Python test suite
-- `uv` — virtual environment & dependency manager
+- **Catch2 v3** — C++ unit tests (engine + settings app)
 
 ---
 
@@ -291,10 +301,10 @@ For the IBus prototype:
     │  Wayland text-input-v2 / v3                              │
     │                                                          │
 ┌───▼──────────────────────────────────────────────────────────┴─────┐
-│                         Fcitx5 / IBus daemon                       │
+│                            Fcitx5 daemon                           │
 └───┬──────────────────────────────────────────────────────────▲─────┘
     │                                                          │
-    │  C++ addon API  /  Python IBus.EngineBase                │
+    │  C++ addon API                                           │
     │                                                          │
 ┌───▼──────────────────────────────────────────────────────────┴─────┐
 │                         XTypeEngine                                │
@@ -334,8 +344,7 @@ The alternative paths were considered and rejected:
 
 David Edmundson's
 [`input-method-playground`](https://invent.kde.org/plasma/input-method-playground)
-validated this exact architecture on KDE Wayland, and the Vocalinux project
-validated the IBus side.
+validated this exact architecture on KDE Wayland.
 
 ### 7.3 Key event state machine
 
@@ -347,7 +356,7 @@ validated the IBus side.
 | `Esc` (suggestion active)            | Dismiss; clear preedit                                        |
 | `Backspace` (suggestion active)      | Dismiss only                                                  |
 | `Backspace` (no suggestion)          | Pop last char from buffer; pass through                       |
-| `Enter`                              | Dismiss; pass through                                         |
+| `Enter` (suggestion active)          | Accept full suggestion if `accept_full_key = "enter"`; otherwise dismiss and pass through |
 | `Ctrl/Alt/Super` + key               | Always pass through                                           |
 | Key release                          | Always ignored                                                |
 | Focus out                            | **Discard** preedit (`commitString("")` + `clearPreedit`)     |
@@ -362,11 +371,9 @@ before the engine's deactivation callback can run.
 
 ### 7.4 Inference pipeline
 
-- Background `std::thread` (C++) / asyncio task (Python), with an
-  `std::atomic<bool>` cancel token / generation counter.
+- Background `std::thread` with an `std::atomic` generation counter for cancellation.
 - Streaming NDJSON parser; tokens delivered to a callback as they arrive.
-- Marshalled back to the main thread via Fcitx5's `eventDispatcher().schedule()`
-  or GLib's `idle_add()` — never call IM APIs off the main thread.
+- Marshalled back to the main thread via Fcitx5's `eventDispatcher().schedule()` — never call IM APIs off the main thread.
 - Default Ollama options: `num_predict=30`, `temperature=0.3`, `top_p=0.9`,
   `stop=[".", "!", "?", "\n"]`.
 - **Anti-loop strategy:** the context is sent as an `assistant`-role message
@@ -376,7 +383,7 @@ before the engine's deactivation callback can run.
 
 ### 7.5 Context buffer
 
-A `std::deque<char>` (1 KB sliding window) tracks the last `context_window`
+A `std::deque<char>` (500-char sliding window) tracks the last `context_window`
 characters typed. It exposes a small state machine:
 
 ```
@@ -389,8 +396,7 @@ dismiss()             ─▶ clears suggestion only
 contextText()         ─▶ entire buffer as std::string
 ```
 
-The Python and C++ implementations share an identical API and identical unit
-tests (`pytest` and Catch2 respectively).
+The implementation is covered by Catch2 unit tests.
 
 ### 7.6 Performance notes
 
@@ -408,45 +414,54 @@ tests (`pytest` and Catch2 respectively).
 
 ```
 XType/
-├── CLAUDE.md                  Engineering rules and session workflow
-├── PLAN.md                    Session-by-session implementation plan
 ├── Summary.md                 High-level project context & rationale
-├── pyproject.toml             Python (IBus prototype) packaging
 │
-├── ibus-engine/               Phase A — Python + IBus prototype
-│   ├── xtype.xml              IBus component descriptor
-│   ├── engine/
-│   │   ├── main.py            IBus.init / factory / main loop
-│   │   ├── engine.py          XTypeEngine(IBus.EngineBase) — key handler
-│   │   ├── inference.py       Async Ollama client (aiohttp)
-│   │   ├── context_buffer.py  Typed-text state machine
-│   │   ├── debouncer.py       180 ms timer-based debounce
-│   │   └── config.py          TOML config loader
-│   └── tests/                 pytest suite
-│
-├── fcitx5-engine/             Phase B — C++20 + Fcitx5 production
+├── fcitx5-engine/             Production Fcitx5 addon (C++20)
 │   ├── CMakeLists.txt
 │   ├── src/
-│   │   ├── xtype.{h,cpp}              InputMethodEngineV2 implementation
-│   │   ├── inference_client.{h,cpp}   libcurl HTTP streaming client
-│   │   ├── context_buffer.{h,cpp}     C++ port of the buffer state machine
-│   │   └── config.h
+│   │   ├── xtype.{h,cpp}                InputMethodEngineV2 — key handler, lifecycle
+│   │   ├── inference_client.{h,cpp}     libcurl streaming client, system prompt mgmt
+│   │   ├── context_buffer.{h,cpp}       500-char rolling context window
+│   │   ├── config.h                     Config structs (InferenceConfig, etc.)
+│   │   ├── config_loader.{h,cpp}        TOML → config struct parser
+│   │   ├── corpus_collector.{h,cpp}     Opt-in background corpus writer
+│   │   ├── style_profile.{h,cpp}        Exemplar extraction + JSON round-trip
+│   │   ├── prompt_builder.{h,cpp}       System prompt assembly with budget cap
+│   │   ├── phrase_blocklist.h           Case-insensitive phrase filter
+│   │   ├── engine_metrics.h             Atomic latency / acceptance counters
+│   │   ├── recent_events.h              Ring buffer of last N inference events
+│   │   └── path_utils.{h,cpp}           ~ expansion helper
 │   ├── data/
-│   │   ├── xtype.conf.in              Fcitx5 addon descriptor
-│   │   └── xtype-im.conf              Input method registration
-│   └── tests/                         Catch2 unit tests
+│   │   ├── xtype.conf.in                Fcitx5 addon descriptor
+│   │   └── xtype-im.conf                Input method registration
+│   └── tests/                           Catch2 unit tests
+│
+├── settings/qt6-app/          Qt6/QML settings interface (xtype-settings)
+│   ├── CMakeLists.txt
+│   ├── src/
+│   │   ├── config_store.{h,cpp}         Single TOML source of truth for QML
+│   │   ├── engine_probe.{h,cpp}         Polls metrics.json / recent_events.json
+│   │   ├── corpus_stats.{h,cpp}         CorpusStats QML context property
+│   │   ├── style_profile_model.{h,cpp}  Exposes exemplars to QML
+│   │   ├── log_tail.{h,cpp}             Tails fcitx5.log / inference.log
+│   │   ├── reloader.{h,cpp}             Triggers fcitx5-remote -r
+│   │   └── ollama_client.{h,cpp}        Fetches available model list
+│   └── qml/
+│       ├── pages/             PageGeneral, PagePersonalisation, PageBlockList,
+│       │                      PagePerApp, PageModel, PageAbout
+│       └── primitives/        Shared UI components (XSlider, XToggle, etc.)
 │
 ├── shared/prompt_templates/   Prompts shared between engines
 ├── scripts/benchmark_ollama.py  TTFT benchmark harness (p50/p95/p99)
 ├── packaging/                 PKGBUILD, systemd service, .desktop file
-└── docs/                      Integration test matrices
+└── docs/                      Integration test matrices, per-app mode docs
 ```
 
 ---
 
 ## 9. Application Compatibility
 
-Status from the Phase B integration test matrix on KDE Plasma Wayland.
+Status from the integration test matrix on KDE Plasma Wayland.
 
 | Application       | Toolkit       | Wayland Protocol  | Status                                  |
 |-------------------|---------------|-------------------|-----------------------------------------|
@@ -466,28 +481,23 @@ Status from the Phase B integration test matrix on KDE Plasma Wayland.
 ### Shipped
 
 - [x] **Phase 0** — Async Ollama client, ContextBuffer, Debouncer, TTFT benchmark harness
-- [x] **Phase A** — IBus prototype (Python): engine skeleton, preedit UX, focus handling, TOML config, end-to-end validation on KDE Wayland
-- [x] **Phase B** — Fcitx5 production (C++20): CMake addon, libcurl streaming client, engine core, KDE Plasma Wayland integration matrix
+- [x] **Fcitx5 engine** — CMake C++20 addon, libcurl streaming client, engine core, KDE Plasma Wayland integration matrix
 - [x] Browser compatibility hardening — Zen GTK4 per-keystroke cycle, Chromium text-input-v3 commit ordering
 - [x] Anti-loop inference — `qwen2.5:1.5b` upgrade with assistant-prefill chat format
+- [x] **Personalisation engine** — opt-in corpus collector, style profile extraction (representative exemplars, privacy filtering), dynamic system-prompt assembly capped at 2000 chars, 5-minute background refresh
+- [x] **User voice profile** — `description`, `tone`, `avoid_phrases`, voice-match strength slider, forget-after-days rolling window
+- [x] **Per-app overrides** — `enabled`, `model`, `debounce_ms`, `num_predict`, `mode`, `prompt_addendum` per application
+- [x] **Qt6/QML settings app** (`xtype-settings`) — all six pages wired to the engine via `config.toml`; sidebar live metrics; reload banner
+- [x] **Engine ↔ UI observability** — `metrics.json`, `recent_events.json`, `inference.log`, LogTail panel
 
 ### Planned
 
-- [ ] **Phase D — Personalization engine** (Sessions 15–17)
-  - Opt-in writing-corpus collector with a hard-coded password-manager blocklist and AI-suggestion exclusion
-  - Style profile extraction (representative exemplars, common openers) with privacy filtering for emails, secrets, and ID-shaped digit runs
-  - Dynamic system-prompt assembly with style exemplars and a 5-minute corpus-mtime refresh, capped at 2000 chars to preserve TTFT
-- [ ] **Phase E — Model & prompt customization** (Sessions 18–19)
-  - Hardware-tier model presets (Low / Balanced / High / Enthusiast) with RAM-based auto-selection and Ollama health-check fallback
-  - Personal prompt config — `description`, `tone`, `avoid_phrases`
-- [ ] **Phase F — Per-app settings** (Session 20)
-  - Per-app overrides for `enabled`, `model`, `debounce_ms`, `prompt_addendum`
-  - Bounded LRU `InferenceClient` pool (cap 3) for per-app model routing
-- [ ] **Phase G — Packaging & polish** (Sessions 21–22)
-  - PKGBUILD + systemd user service + AUR submission
-  - KCModule settings panel — General, Personalization, Per-app, Blocklist, Status
+- [ ] **Model presets** — hardware-tier presets (Low / Balanced / High / Enthusiast) with RAM-based auto-selection and Ollama health-check fallback
+- [ ] **PKGBUILD + AUR** — packaging, systemd user service, AUR submission
+- [ ] **Learning model improvements** — acceptance-history ranking, per-field context analysis
+- [ ] **Screen reader context** (exploratory) — stronger context from accessibility APIs for better suggestions
 
-The full session-by-session plan — file layouts, interfaces, and per-session gotchas — lives in [`PLAN.md`](./PLAN.md). Speculative ideas (LoRA fine-tuning loop, per-field context detection, acceptance-history ranking) are tracked under "Future work" at the bottom of that file.
+The full session-by-session plan — file layouts, interfaces, and per-session gotchas — lives in [`PLAN.md`](./PLAN.md).
 
 ---
 

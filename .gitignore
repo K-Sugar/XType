@@ -10,6 +10,9 @@ settings/qt6-app/qml/primitives/Demo.qml
 # Release notes — kept locally, not tracked
 RELEASE-NOTES-*.md
 
+# IBus prototype — development reference only, not part of the release
+ibus-engine/
+
 # Claude Code and planning files — kept locally, not tracked
 .claude/
 .obsidian/
