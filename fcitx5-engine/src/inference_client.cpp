@@ -6,10 +6,19 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <string_view>
+#include <system_error>
 
 static FILE *ic_logfile() {
-    static FILE *f = std::fopen("/home/saint/Desktop/XType/fcitx5-engine/thread.log", "w");
+    static FILE *f = []() -> FILE* {
+        const char* home = std::getenv("HOME");
+        if (!home || !*home) return nullptr;
+        std::string dir = std::string(home) + "/.local/share/xtype";
+        std::error_code ec;
+        std::filesystem::create_directories(dir, ec);
+        return std::fopen((dir + "/inference.log").c_str(), "a");
+    }();
     return f;
 }
 static void iclog(const char *fmt, ...) {
@@ -70,12 +79,6 @@ static std::string json_str(std::string_view json, std::string_view key) {
         }
     }
     return result;
-}
-
-static bool json_bool(std::string_view json, std::string_view key) {
-    std::string needle;
-    needle += '"'; needle += key; needle += "\":true";
-    return json.find(needle) != std::string_view::npos;
 }
 
 // ── Payload builder ───────────────────────────────────────────────────────────
