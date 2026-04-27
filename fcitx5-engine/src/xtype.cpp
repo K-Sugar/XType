@@ -258,12 +258,19 @@ void XTypeEngine::keyEvent(const fcitx::InputMethodEntry &,
         return;
     }
 
-    // Enter — dismiss suggestion, pass key through.
     if (sym == FcitxKey_Return || sym == FcitxKey_KP_Enter) {
-        if (hasSuggestion) {
-            invalidate();
+        if (hasSuggestion &&
+            _cfg.behaviour.accept_full_key == AcceptKey::Enter) {
+            std::string committed = _ctx.acceptAll();
+            ic->commitString(committed);
             updatePreedit(ic);
+            ++_metrics.suggestions_accepted;
+            _metrics.chars_accepted += committed.size();
+            event.filterAndAccept();
+            return;
         }
+        // Default: dismiss and pass through.
+        if (hasSuggestion) { invalidate(); updatePreedit(ic); }
         if (_corpus && !_userTypedSinceLastTerminator.empty())
             harvestSentence(ic->program());
         return;
@@ -281,6 +288,21 @@ void XTypeEngine::keyEvent(const fcitx::InputMethodEntry &,
                 _userTypedSinceLastTerminator.pop_back();
             _debounceTimer.reset();
         }
+        return;
+    }
+
+    // Right arrow — accept next word when configured and suggestion active.
+    if (sym == FcitxKey_Right &&
+        _cfg.behaviour.accept_full_key == AcceptKey::Right &&
+        hasSuggestion) {
+        std::string committed = _cfg.behaviour.partial_accept
+                                ? _ctx.acceptNextWord()
+                                : _ctx.acceptAll();
+        ic->commitString(committed);
+        updatePreedit(ic);
+        ++_metrics.suggestions_accepted;
+        _metrics.chars_accepted += committed.size();
+        event.filterAndAccept();
         return;
     }
 
