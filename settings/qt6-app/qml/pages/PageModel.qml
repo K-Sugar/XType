@@ -9,6 +9,7 @@ Item {
 
     // Model-switch confirmation overlay
     property string _pendingModel: ""
+    property bool advancedExpanded: false
 
     Flickable {
         id: flick
@@ -138,8 +139,85 @@ Item {
                 }
             }
 
-            // ── 03 Available models ────────────────────────────────────────
-            XSection { title: "Available models"; num: "03"; width: parent.width }
+            // ── 03 Advanced inference ─────────────────────────────────────
+            Item {
+                width: parent.width
+                height: 24
+
+                XSection {
+                    num: "03"
+                    title: "Advanced inference"
+                    anchors { left: parent.left; right: advChevron.left; rightMargin: 8; verticalCenter: parent.verticalCenter }
+                }
+
+                Text {
+                    id: advChevron
+                    anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+                    text: root.advancedExpanded ? "▲ Collapse" : "▼ Expand"
+                    color: Theme.ink45
+                    font.family: Theme.sansFamily; font.pixelSize: 11
+                    renderType: Text.NativeRendering
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.advancedExpanded = !root.advancedExpanded
+                    }
+                }
+            }
+
+            Column {
+                visible: root.advancedExpanded
+                width: parent.width
+                spacing: 0
+
+                XRow {
+                    label: "Temperature"
+                    desc: "Controls randomness. Lower = more predictable completions. (0.0 – 1.0)"
+                    width: parent.width
+                    XSlider {
+                        min: 0.0; max: 1.0; step: 0.05
+                        value: Config.temperature
+                        formatFn: function(v) { return v.toFixed(2) }
+                        onCommitted: (v) => Config.temperature = v
+                        width: 200
+                    }
+                }
+
+                XRow {
+                    label: "Top-P"
+                    desc: "Nucleus sampling cutoff. Lower = more focused. (0.0 – 1.0)"
+                    width: parent.width
+                    XSlider {
+                        min: 0.0; max: 1.0; step: 0.05
+                        value: Config.topP
+                        formatFn: function(v) { return v.toFixed(2) }
+                        onCommitted: (v) => Config.topP = v
+                        width: 200
+                    }
+                }
+
+                XRow {
+                    label: "Stop tokens"
+                    desc: "Comma-separated list. Suggestion stops when any token appears."
+                    isLast: true
+                    width: parent.width
+                    XInput {
+                        width: 280
+                        text: Config.stopTokens.map(function(s) {
+                            return s.replace(/\n/g, "\\n")
+                        }).join(", ")
+                        onEditingFinished: {
+                            var parts = text.split(",")
+                                .map(function(s) { return s.trim().replace(/\\n/g, "\n") })
+                                .filter(function(s) { return s.length > 0 })
+                            Config.stopTokens = parts
+                        }
+                    }
+                }
+            }
+
+            // ── 04 Available models ────────────────────────────────────────
+            XSection { title: "Available models"; num: "04"; width: parent.width }
 
             Column {
                 width: parent.width
