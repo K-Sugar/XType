@@ -175,6 +175,21 @@ ctest --test-dir settings/qt6-app/build   # unit tests
   `_recent`, but gate at 500 ms minimum interval (atomic timestamp
   flag). The settings app reads when it polls EngineProbe.
 
+- **E3 QML primitive API drift** (discovered in E3):
+  The E3 session plan's QML snippets reference primitive APIs that do not match
+  the actual components:
+  - `XSegmented` uses `options:` (not `model:`) and `selectedIndex:` (not
+    `currentIndex:`). The signal name `selected(int)` is correct.
+  - `XPhraseRow` emits `removeClicked()` (not `remove()`); the handler is
+    `onRemoveClicked:`. Use index-based splice (pattern from PageBlockList.qml)
+    rather than filter-by-value to handle duplicate phrases.
+  - `XInput` does not forward `editingFinished` from the internal TextField.
+    Add `signal editingFinished()` + a Connections block to XInput.qml so the
+    plan's `onEditingFinished:` pattern works.
+  - Repeater delegates under `pragma ComponentBehavior: Bound` must declare
+    `required property string modelData` (and `required property int index` if
+    index-based splice is used). Mirror the pattern in PageBlockList.qml:83-84.
+
 ---
 
 ## §8. Session ordering and dependency

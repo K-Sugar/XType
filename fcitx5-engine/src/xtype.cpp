@@ -3,12 +3,14 @@
 #include <algorithm>
 #include <cctype>
 #include <cinttypes>
+#include <cmath>
 #include <cstdarg>
 #include <cstdio>
 #include <ctime>
 #include <filesystem>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 
 #include <fcitx-utils/eventloopinterface.h>
@@ -628,13 +630,45 @@ void XTypeEngine::applyPrompt() {
     in.profile         = _profile.get();
     in.includeExamples = _cfg.learning.include_examples_in_prompt;
     in.budgetChars     = kPromptBudget;
+
+    in.userDescription = _cfg.user_prompt.description;
+    in.avoidPhrases    = _cfg.user_prompt.avoid_phrases;
+
+    // voice_strength (0–100) limits exemplar count. At 0: suppress entirely.
+    if (_profile && !_profile->exemplars().empty() &&
+        _cfg.learning.voice_strength < 100) {
+        size_t maxEx = (_cfg.learning.voice_strength == 0)
+            ? 0
+            : static_cast<size_t>(
+                std::ceil(_profile->exemplars().size() *
+                          (_cfg.learning.voice_strength / 100.0)));
+        if (maxEx == 0)
+            in.includeExamples = false;
+    }
+
+    // Tone: append a short style modifier when a non-default tone is set.
+    if (!_cfg.user_prompt.tone.empty() && _cfg.user_prompt.tone != "default") {
+        static const std::unordered_map<std::string, const char*> kToneMap = {
+            {"technical",    " Prefer precise technical terminology."},
+            {"casual",       " Use a relaxed, conversational tone."},
+            {"professional", " Use formal, professional language."},
+            {"concise",      " Be brief and direct."},
+        };
+        auto it = kToneMap.find(_cfg.user_prompt.tone);
+        if (it != kToneMap.end())
+            in.base += it->second;
+    }
+
     bool truncated = false;
     auto prompt = buildSystemPrompt(in, &truncated);
     if (truncated)
         log_warn("system prompt truncated to fit 2000-char budget");
     size_t exCount = _profile ? _profile->exemplars().size() : (size_t)0;
-    dbg("[prompt] set %zu chars exemplars=%zu truncated=%d",
-        prompt.size(), exCount, truncated ? 1 : 0);
+    dbg("[prompt] set %zu chars exemplars=%zu desc_len=%zu avoid=%zu truncated=%d",
+        prompt.size(), exCount,
+        in.userDescription.size(),
+        in.avoidPhrases.size(),
+        truncated ? 1 : 0);
     _inference.set_system_prompt(std::move(prompt));
 }
 
