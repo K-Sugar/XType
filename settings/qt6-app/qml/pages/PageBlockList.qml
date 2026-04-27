@@ -139,7 +139,7 @@ Item {
 
                 Text {
                     text: "Add to block list"
-                    font.family: Theme.sansFamily; font.pixelSize: 13; font.weight: Font.SemiBold
+                    font.family: Theme.sansFamily; font.pixelSize: 13; font.weight: Font.DemiBold
                     color: Theme.ink100
                     renderType: Text.NativeRendering
                 }

@@ -47,7 +47,7 @@ Item {
 
                             Text {
                                 text: modelData.value
-                                font.family: Theme.monoFamily; font.pixelSize: 18; font.weight: Font.SemiBold
+                                font.family: Theme.monoFamily; font.pixelSize: 18; font.weight: Font.DemiBold
                                 color: Theme.ink100
                                 renderType: Text.NativeRendering
                             }
@@ -196,7 +196,7 @@ Item {
 
                 Text {
                     text: "Wipe corpus?"
-                    font.family: Theme.sansFamily; font.pixelSize: 13; font.weight: Font.SemiBold
+                    font.family: Theme.sansFamily; font.pixelSize: 13; font.weight: Font.DemiBold
                     color: Theme.ink100
                     renderType: Text.NativeRendering
                 }

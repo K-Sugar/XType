@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls.Basic
 import XType.Settings 1.0
 
 Item {
@@ -16,6 +17,7 @@ Item {
     Accessible.description: comingSoon ? "Not yet wired into the engine" : ""
 
     readonly property real _pct: max > min ? (value - min) / (max - min) : 0
+    readonly property alias hovered: sliderMa.containsMouse
 
     Text {
         id: valueLabel
@@ -59,6 +61,7 @@ Item {
         }
 
         MouseArea {
+            id: sliderMa
             anchors { fill: parent; topMargin: -6; bottomMargin: -6 }
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor

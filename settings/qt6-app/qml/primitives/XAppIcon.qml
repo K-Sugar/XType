@@ -32,7 +32,7 @@ Rectangle {
     }
 
     gradient: Gradient {
-        orientation: Gradient.Diagonal
+        orientation: Gradient.Horizontal
         GradientStop { position: 0.0; color: root._g0 }
         GradientStop { position: 1.0; color: root._g1 }
     }
@@ -40,7 +40,7 @@ Rectangle {
     Text {
         anchors.centerIn: parent
         text: root.cls !== "" ? root.cls.slice(0, 1).toUpperCase() : "?"
-        font.family: Theme.sansFamily; font.pixelSize: 14; font.weight: Font.SemiBold
+        font.family: Theme.sansFamily; font.pixelSize: 14; font.weight: Font.DemiBold
         color: root.cls !== "" ? "white" : Theme.ink65
         renderType: Text.NativeRendering
     }

@@ -40,7 +40,7 @@ Item {
 
                     Text {
                         text: Config.model
-                        font.family: Theme.monoFamily; font.pixelSize: 15; font.weight: Font.SemiBold
+                        font.family: Theme.monoFamily; font.pixelSize: 15; font.weight: Font.DemiBold
                         color: Theme.ink100
                         renderType: Text.NativeRendering
                     }
@@ -76,7 +76,7 @@ Item {
                                     Text {
                                         anchors.horizontalCenter: parent.horizontalCenter
                                         text: modelData.value
-                                        font.family: Theme.monoFamily; font.pixelSize: 14; font.weight: Font.SemiBold
+                                        font.family: Theme.monoFamily; font.pixelSize: 14; font.weight: Font.DemiBold
                                         color: Theme.ink100
                                         renderType: Text.NativeRendering
                                     }
@@ -242,7 +242,7 @@ Item {
                 Text {
                     width: parent.width
                     text: "Switch to " + root._pendingModel + "?"
-                    font.family: Theme.sansFamily; font.pixelSize: 13; font.weight: Font.SemiBold
+                    font.family: Theme.sansFamily; font.pixelSize: 13; font.weight: Font.DemiBold
                     color: Theme.ink100; wrapMode: Text.WordWrap
                     renderType: Text.NativeRendering
                 }

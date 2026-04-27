@@ -182,7 +182,7 @@ Item {
 
                 Text {
                     text: "Reset all settings?"
-                    font.family: Theme.sansFamily; font.pixelSize: 13; font.weight: Font.SemiBold
+                    font.family: Theme.sansFamily; font.pixelSize: 13; font.weight: Font.DemiBold
                     color: "#ff8a8a"
                     renderType: Text.NativeRendering
                 }
