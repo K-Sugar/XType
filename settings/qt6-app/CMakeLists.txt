@@ -6,6 +6,7 @@ set(CMAKE_AUTOMOC ON)
 
 find_package(Qt6 6.7 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2)
 qt_standard_project_setup(REQUIRES 6.7)
+qt_policy(SET QTP0004 NEW)
 
 find_package(KF6WindowSystem QUIET)
 if(KF6WindowSystem_FOUND)
@@ -16,6 +17,7 @@ configure_file(src/build_info.h.in ${CMAKE_CURRENT_BINARY_DIR}/build_info.h @ONL
 
 qt_add_executable(xtype-settings
     src/main.cpp
+    # TUs added in U1b (config_store, engine_probe, …) — list grows then.
 )
 
 qt_add_qml_module(xtype-settings
@@ -24,8 +26,11 @@ qt_add_qml_module(xtype-settings
     QML_FILES
         qml/App.qml
         qml/Theme.qml
+        qml/primitives/XGrain.qml
     RESOURCES
         data/icons/xtype.svg
+        data/fonts/Inter-Variable.ttf
+        data/fonts/JetBrainsMono-Variable.ttf
 )
 
 target_include_directories(xtype-settings PRIVATE

@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Window
+import XType.Settings 1.0
 
 Window {
     id: window
@@ -12,20 +13,27 @@ Window {
 
     Rectangle {
         anchors.fill: parent
-        radius: 14
-        color: "#1a1025"
-        border.color: "#3d2b6e"
+        radius: Theme.radius.window
+        color: Qt.rgba(0.10, 0.06, 0.22, Theme.bgAlpha)
+        border.color: Theme.purpleDeep
         border.width: 1
 
-        Text {
+        // Acceptance test: Theme.purple resolves
+        Rectangle {
             anchors.centerIn: parent
-            text: "XType Settings"
-            color: "#e0d8f8"
-            font.pixelSize: 18
+            width: 120; height: 40
+            radius: Theme.radius.btn
+            color: Theme.purple
+
+            Text {
+                anchors.centerIn: parent
+                text: Theme.sansFamily
+                color: Theme.ink100
+                font.pixelSize: 14
+            }
         }
 
         MouseArea {
-            id: dragArea
             anchors.fill: parent
             onPressed: window.startSystemMove()
         }
