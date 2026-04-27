@@ -8,10 +8,10 @@
 > engine scaffold spec (§U1.2). If this file and `ui-ultra-plan/` diverge, the
 > folder wins.
 >
-> **Sub-session headline commits:**
-> - U1a (Steps 0–4): `feat(settings): qt6 foundation + window chrome`
-> - U1b (Steps 5–7): `feat(settings): primitives + config store + engine probe`
-> - U1c (Steps 8, 10–12): `feat(settings): qt6/qml standalone settings app — full prototype port`
+> **Sub-session headline commits (all merged ✓):**
+> - [x] U1a (Steps 0–4): `feat(settings): qt6 foundation + window chrome`
+> - [x] U1b (Steps 5–7): `feat(settings): primitives + config store + engine probe`
+> - [x] U1c (Steps 8, 10–12): `feat(settings): qt6/qml standalone settings app — full prototype port`
 
 ## U1.1 — Inventory of prototype surfaces
 

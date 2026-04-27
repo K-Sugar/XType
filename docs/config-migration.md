@@ -10,6 +10,10 @@ window:
 - If only `tab_accepts_word` is present, it is read and a warning is logged.
 - Subsequent saves write only `partial_accept`.
 
+`xtype-settings` (the GUI app in `settings/qt6-app/`) performs this migration
+automatically: opening the app and letting it save once is sufficient.
+The old key is never written back.
+
 To migrate manually, update `~/.config/xtype/config.toml`:
 
 ```toml

@@ -482,7 +482,7 @@
 
 ---
 
-### [ ] Session 22 — Settings UI + per-app profiles
+### [x] Session 22 — Settings UI + per-app profiles
 
 (merged into Session U1c — see ui-ultra-plan/)
 
