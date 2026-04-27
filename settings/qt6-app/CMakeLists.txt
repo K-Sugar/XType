@@ -8,6 +8,8 @@ find_package(Qt6 6.7 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2)
 qt_standard_project_setup(REQUIRES 6.7)
 qt_policy(SET QTP0004 NEW)
 
+option(BUILD_TESTS "Build Catch2 unit tests" OFF)
+
 find_package(KF6WindowSystem QUIET)
 if(KF6WindowSystem_FOUND)
     add_compile_definitions(HAVE_KF6_WINDOW_SYSTEM)
@@ -17,7 +19,7 @@ configure_file(src/build_info.h.in ${CMAKE_CURRENT_BINARY_DIR}/build_info.h @ONL
 
 qt_add_executable(xtype-settings
     src/main.cpp
-    # TUs added in U1b (config_store, engine_probe, …) — list grows then.
+    src/config_store.cpp
 )
 
 set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
@@ -61,6 +63,11 @@ target_link_libraries(xtype-settings PRIVATE
     Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2
     $<$<TARGET_EXISTS:KF6::WindowSystem>:KF6::WindowSystem>
 )
+
+if(BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
 
 install(TARGETS xtype-settings RUNTIME DESTINATION bin)
 install(FILES data/xtype-settings.desktop DESTINATION share/applications)

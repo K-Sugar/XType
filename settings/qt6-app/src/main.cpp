@@ -1,5 +1,6 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
+#include <QQmlEngine>
 #include <QQuickStyle>
 #include <QQuickWindow>
 #include <QFontDatabase>
@@ -10,6 +11,8 @@
 #include <KWindowSystem>
 #include <KWindowEffects>
 #endif
+
+#include "config_store.h"
 
 class GrainProvider : public QQuickImageProvider {
 public:
@@ -47,6 +50,10 @@ int main(int argc, char** argv) {
         qWarning() << "xtype-settings: failed to load Inter Variable font";
     if (QFontDatabase::addApplicationFont(fontBase + "JetBrainsMono-Variable.ttf") < 0)
         qWarning() << "xtype-settings: failed to load JetBrains Mono Variable font";
+
+    static ConfigStore configStore;
+    configStore.load();
+    qmlRegisterSingletonInstance<ConfigStore>("XType.Settings", 1, 0, "Config", &configStore);
 
     QQmlApplicationEngine engine;
     engine.addImageProvider("grain", new GrainProvider);   // must precede loadFromModule
