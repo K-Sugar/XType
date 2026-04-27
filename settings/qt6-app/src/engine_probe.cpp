@@ -1,9 +1,10 @@
 #include "engine_probe.h"
 
-#include <QFile>
 #include <QDir>
 #include <QDebug>
+#include <QFile>
 #include <QProcessEnvironment>
+#include <QRegularExpression>
 
 #include <ctime>
 #include <unistd.h>
@@ -166,4 +167,19 @@ void EngineProbe::poll() {
     sampleCpu(pid);
     sampleRam(pid);
     checkFcitx5State();
+
+    QFile mf(QDir::homePath() + "/.local/share/xtype/metrics.json");
+    if (mf.open(QIODevice::ReadOnly)) {
+        QByteArray data = mf.readAll();
+        mf.close();
+        QRegularExpression re(R"("latency_p50_ms"\s*:\s*(\d+))");
+        auto m = re.match(QString::fromUtf8(data));
+        if (m.hasMatch()) {
+            int p50 = m.captured(1).toInt();
+            if (p50 != _latencyP50) {
+                _latencyP50 = p50;
+                emit latencyP50Changed();
+            }
+        }
+    }
 }

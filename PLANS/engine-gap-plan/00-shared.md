@@ -141,12 +141,25 @@ ctest --test-dir settings/qt6-app/build   # unit tests
   `avoidPhrases`** from `_cfg.user_prompt` even though
   `buildSystemPrompt` supports both fields. Session E3 fixes this.
 
+- **E2.4 LiveDemo.qml did not already consume RecentEvents**: The E2 plan
+  stated "LiveDemo.qml already checks RecentEvents.first()". The actual file
+  used only self-contained fixture sequences. A small Connections hook was added
+  to LiveDemo.qml to read real events from RecentEvents.eventsChanged and
+  display `typed + ghost`; fixture cycle runs as fallback when no real events exist.
+
 - **`reloadConfig()` vs constructor**: config is loaded in the
   constructor AND in `reloadConfig()`. After reload, the inference
   client must be told the new system prompt (`applyPrompt()`) and
   the corpus collector must be re-initialised if the corpus path
   changed. Do NOT reinitialise if learning was disabled in config but is
   running — check for actual change before teardown.
+
+- **Full fcitx5 restart required after installing a new .so**: `ReloadAddonConfig` and
+  `fcitx5-remote -r` only call `reloadConfig()` on the addon already in memory — they
+  do not reload the shared library from disk. After `sudo ninja install`, run
+  `fcitx5 --replace -d` to get fcitx5 to load the new binary. Symptom: the old
+  behaviour persists even though the install succeeded and the config was reloaded.
+  Diagnosis: `cat /proc/$(pgrep -x fcitx5)/maps | grep xtype` shows `(deleted)`.
 
 - **comingSoon controls must still write to TOML**: the settings app
   already implements this (comingSoon lowers opacity but the MouseArea
@@ -171,6 +184,7 @@ E0 (TOML loader)
   ├─▶ E1 (accept key / phrase blocklist / threads engine)
   │     └─▶ E1-UI (remove comingSoon in settings)
   ├─▶ E2 (observability bridge)
+  │     └─▶ E2-UI (replace LiveDemo with live test input)
   ├─▶ E3 (user prompt engine + UI)
   ├─▶ E4 (voice_strength / forget_after_days / per-app)
   └─▶ E6 (code quality — independent but benefits from E0 being present)
@@ -191,6 +205,7 @@ on separate branches that rebase onto E0's commit. E1-UI must follow E1.
 | E1 | Switching accept key to Enter → Enter accepts suggestion (not just dismisses); threads slider changes `num_thread` in Ollama payload |
 | E1-UI | Enter, → pills and Threads slider no longer show comingSoon opacity in xtype-settings |
 | E2 | Latency display in Model page shows non-zero values after a few suggestions; LiveDemo shows real recent events when engine is active |
+| E2-UI | General page shows a live text-input area; typing with XType active produces an inline underlined ghost-text suggestion; Tab accepts |
 | E3 | Filling user description + clicking Reload → description appears in system prompt visible in debug log; avoid_phrases excluded from suggestions |
 | E4 | Disabling XType for Kate (per-app) → suggestions stop; voice slider at 0 → no exemplars in prompt; setting forget_after_days=7 → old corpus entries pruned on next flush |
 | E5 | Temperature slider at 0.9 → Ollama receives `"temperature":0.9`; max_corpus_mb at 20 → corpus trimmed to 20 MB |

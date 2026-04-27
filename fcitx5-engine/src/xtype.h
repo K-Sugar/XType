@@ -2,10 +2,12 @@
 
 #include <atomic>
 #include <cstdint>
+#include <ctime>
 #include <memory>
 #include <optional>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include <fcitx/addonfactory.h>
 #include <fcitx/addonmanager.h>
@@ -87,6 +89,16 @@ private:
     // XTYPE_PROFILE_REFRESH_SEC (clamped >= 30).
     bool                                     _debugVerbose{false};
     int                                      _profileRefreshSec{300};
+
+    // Latency tracking: rolling window of last 32 inference durations (ms).
+    static constexpr size_t kLatencyWindowSize = 32;
+    std::vector<int>         _latencyWindow;
+    std::time_t              _metricsLastWrite{0};
+    std::time_t              _eventsLastWrite{0};
+
+    void recordLatency(int ms);
+    void writeMetrics();
+    void writeRecentEvents();
 
     static constexpr size_t kUserBufCap        = 2048;
     static constexpr int    kProfileRefreshSec = 300;   // 5 min default

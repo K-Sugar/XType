@@ -2,11 +2,13 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cinttypes>
 #include <cstdarg>
 #include <cstdio>
 #include <ctime>
 #include <filesystem>
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include <fcitx-utils/eventloopinterface.h>
@@ -245,6 +247,8 @@ void XTypeEngine::keyEvent(const fcitx::InputMethodEntry &,
         updatePreedit(ic);
         ++_metrics.suggestions_accepted;
         _metrics.chars_accepted += committed.size();
+        _recent.set_last_accepted();
+        writeRecentEvents();
         event.filterAndAccept();
         return;
     }
@@ -266,6 +270,8 @@ void XTypeEngine::keyEvent(const fcitx::InputMethodEntry &,
             updatePreedit(ic);
             ++_metrics.suggestions_accepted;
             _metrics.chars_accepted += committed.size();
+            _recent.set_last_accepted();
+            writeRecentEvents();
             event.filterAndAccept();
             return;
         }
@@ -302,6 +308,8 @@ void XTypeEngine::keyEvent(const fcitx::InputMethodEntry &,
         updatePreedit(ic);
         ++_metrics.suggestions_accepted;
         _metrics.chars_accepted += committed.size();
+        _recent.set_last_accepted();
+        writeRecentEvents();
         event.filterAndAccept();
         return;
     }
@@ -357,6 +365,7 @@ void XTypeEngine::requestInference(
     ++_gen;
     ++_metrics.suggestions_generated;
     const uint64_t myGen = _gen;
+    const auto     startUs = fcitx::now(CLOCK_MONOTONIC);
 
     dbg("requestInference ctx='%.40s...'", ctx.c_str());
     _inference.request(
@@ -375,11 +384,11 @@ void XTypeEngine::requestInference(
                     updatePreedit(icPtr);
                 });
         },
-        [this, myGen, icRef, icPtr]() {
+        [this, myGen, icRef, icPtr, startUs]() {
             dbg("inference done, myGen=%llu curGen=%llu", (unsigned long long)myGen, (unsigned long long)_gen);
             _instance->eventDispatcher().scheduleWithContext(
                 icRef,
-                [this, myGen, icPtr]() {
+                [this, myGen, icPtr, startUs]() {
                     if (myGen != _gen) return;
                     if (_ctx.hasSuggestion()) {
                         std::string s = *_ctx.suggestion();
@@ -414,6 +423,21 @@ void XTypeEngine::requestInference(
                         _ctx.setSuggestion(std::move(s));
                     }
                     updatePreedit(icPtr);
+                    const auto endUs = fcitx::now(CLOCK_MONOTONIC);
+                    recordLatency(static_cast<int>((endUs - startUs) / 1000));
+                    if (_ctx.hasSuggestion()) {
+                        RecentEvent ev;
+                        const std::string ctxText = _ctx.contextText();
+                        ev.typed      = ctxText.substr(
+                                           static_cast<size_t>(std::max(0, (int)ctxText.size() - 40)));
+                        ev.ghost      = _ctx.suggestion() ? *_ctx.suggestion() : "";
+                        ev.app        = icPtr->program();
+                        ev.accepted   = false;
+                        ev.latency_ms = static_cast<int>((endUs - startUs) / 1000);
+                        ev.ts         = std::time(nullptr);
+                        _recent.push(ev);
+                        writeRecentEvents();
+                    }
                 });
         },
         [](std::string err) { dbg("inference error: %s", err.c_str()); }
@@ -497,6 +521,103 @@ void XTypeEngine::harvestSentence(const std::string &program) {
         dbg("[harvest] verbose content='%s'", snip.c_str());
     }
     _corpus->record(std::move(s));
+}
+
+// ── Observability (E2) ────────────────────────────────────────────────────────
+
+void XTypeEngine::recordLatency(int ms) {
+    if (_latencyWindow.size() >= kLatencyWindowSize)
+        _latencyWindow.erase(_latencyWindow.begin());
+    _latencyWindow.push_back(ms);
+
+    std::vector<int> sorted = _latencyWindow;
+    std::sort(sorted.begin(), sorted.end());
+    size_t n = sorted.size();
+    _metrics.latency_p50_ms.store(sorted[n / 2]);
+    _metrics.latency_p95_ms.store(sorted[std::min(n - 1, static_cast<size_t>(n * 0.95))]);
+
+    writeMetrics();
+}
+
+void XTypeEngine::writeMetrics() {
+    std::time_t now = std::time(nullptr);
+    if (now == _metricsLastWrite) return;
+    _metricsLastWrite = now;
+
+    auto dir = path_utils::expandTilde("~/.local/share/xtype");
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    auto tmp = (dir / "metrics.json.tmp").string();
+    auto dst = (dir / "metrics.json").string();
+
+    char buf[512];
+    std::snprintf(buf, sizeof(buf),
+        "{\"latency_p50_ms\":%d,\"latency_p95_ms\":%d,"
+        "\"suggestions_generated\":%" PRIu64 ","
+        "\"suggestions_accepted\":%" PRIu64 ","
+        "\"chars_accepted\":%" PRIu64 ","
+        "\"updated_at\":%" PRId64 "}\n",
+        _metrics.latency_p50_ms.load(),
+        _metrics.latency_p95_ms.load(),
+        static_cast<uint64_t>(_metrics.suggestions_generated.load()),
+        static_cast<uint64_t>(_metrics.suggestions_accepted.load()),
+        static_cast<uint64_t>(_metrics.chars_accepted.load()),
+        static_cast<int64_t>(now));
+
+    if (FILE* f = std::fopen(tmp.c_str(), "w")) {
+        std::fputs(buf, f);
+        std::fclose(f);
+        std::rename(tmp.c_str(), dst.c_str());
+    }
+}
+
+void XTypeEngine::writeRecentEvents() {
+    std::time_t now = std::time(nullptr);
+    if (now == _eventsLastWrite) return;
+    _eventsLastWrite = now;
+
+    auto dir = path_utils::expandTilde("~/.local/share/xtype");
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    auto tmp = (dir / "recent_events.json.tmp").string();
+    auto dst = (dir / "recent_events.json").string();
+
+    auto esc = [](std::string_view s) {
+        std::string out;
+        for (char c : s) {
+            if (c == '"')       out += "\\\"";
+            else if (c == '\\') out += "\\\\";
+            else if (c == '\n') out += "\\n";
+            else                out += c;
+        }
+        return out;
+    };
+
+    auto snap = _recent.snapshot();
+    std::string json = "[\n";
+    bool first = true;
+    for (const auto& ev : snap) {
+        if (!first) json += ",\n";
+        first = false;
+        char entry[1024];
+        std::snprintf(entry, sizeof(entry),
+            "  {\"typed\":\"%s\",\"ghost\":\"%s\",\"app\":\"%s\","
+            "\"accepted\":%s,\"latency_ms\":%d,\"ts\":%" PRId64 "}",
+            esc(ev.typed).c_str(),
+            esc(ev.ghost).c_str(),
+            esc(ev.app).c_str(),
+            ev.accepted ? "true" : "false",
+            ev.latency_ms,
+            static_cast<int64_t>(ev.ts));
+        json += entry;
+    }
+    json += "\n]\n";
+
+    if (FILE* f = std::fopen(tmp.c_str(), "w")) {
+        std::fputs(json.c_str(), f);
+        std::fclose(f);
+        std::rename(tmp.c_str(), dst.c_str());
+    }
 }
 
 // ── Personalization (Session 17) ──────────────────────────────────────────────

@@ -27,6 +27,12 @@ public:
         if (_count < kCapacity) ++_count;
     }
 
+    void set_last_accepted() {
+        std::lock_guard<std::mutex> lk(_mu);
+        if (_count == 0) return;
+        _buf[(_head + kCapacity - 1) % kCapacity].accepted = true;
+    }
+
     // Returns events newest-first.
     std::vector<RecentEvent> snapshot() const {
         std::lock_guard<std::mutex> lk(_mu);

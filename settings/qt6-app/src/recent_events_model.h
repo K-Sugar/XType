@@ -1,15 +1,27 @@
 #pragma once
 
+#include <QFileSystemWatcher>
 #include <QObject>
+#include <QString>
+#include <QVariantList>
 #include <QVariantMap>
 
-// Scaffold: the ring is empty since §U1.2 has no event producers yet.
-// Returns {} from first() until the engine exports events via a file/socket.
 class RecentEventsModel : public QObject {
     Q_OBJECT
 
 public:
-    explicit RecentEventsModel(QObject *parent = nullptr);
+    explicit RecentEventsModel(QObject* parent = nullptr);
 
-    Q_INVOKABLE QVariantMap first() const { return {}; }
+    Q_INVOKABLE QVariantMap first() const;
+    Q_INVOKABLE void refresh();
+
+signals:
+    void eventsChanged();
+
+private:
+    void loadFile();
+
+    QVariantList       _events;
+    QFileSystemWatcher _watcher;
+    QString            _path;
 };

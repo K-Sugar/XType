@@ -12,7 +12,7 @@ class EngineProbe : public QObject {
     Q_PROPERTY(double  ramGb        READ ramGb        NOTIFY ramGbChanged)
     Q_PROPERTY(QString state        READ state        NOTIFY stateChanged)
     Q_PROPERTY(QString stateMessage READ stateMessage NOTIFY stateMessageChanged)
-    Q_PROPERTY(int     latencyP50   READ latencyP50   CONSTANT)
+    Q_PROPERTY(int     latencyP50   READ latencyP50   NOTIFY latencyP50Changed)
 
 public:
     explicit EngineProbe(QObject *parent = nullptr);
@@ -21,13 +21,14 @@ public:
     double  ramGb()        const { return _ramGb; }
     QString state()        const { return _state; }
     QString stateMessage() const { return _stateMessage; }
-    int     latencyP50()   const { return 0; }  // scaffold; engine doesn't yet export this via IPC
+    int     latencyP50()   const { return _latencyP50; }
 
 signals:
     void cpuPctChanged();
     void ramGbChanged();
     void stateChanged();
     void stateMessageChanged();
+    void latencyP50Changed();
 
 private slots:
     void poll();
@@ -45,6 +46,7 @@ private:
     double  _ramGb         = 0.0;
     QString _state         = "paused";
     QString _stateMessage;
+    int     _latencyP50    = 0;
 
     // CPU delta tracking
     int         _lastPid      = -1;

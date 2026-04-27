@@ -20,6 +20,7 @@ Item {
     property bool _typing:   true
     property string _display: ""
     property bool _caretOn: true
+    property var  _liveEvent: null
 
     function _advance() {
         if (root.paused) return
@@ -49,6 +50,14 @@ Item {
         }
     }
 
+    Connections {
+        target: RecentEvents
+        function onEventsChanged() {
+            const ev = RecentEvents.first()
+            root._liveEvent = (ev && ev.typed) ? ev : null
+        }
+    }
+
     Component.onCompleted: {
         _display = demoSequences[0].prefix
         typeTimer.start()
@@ -58,7 +67,7 @@ Item {
         id: typeTimer
         interval: 55
         repeat: true
-        running: !root.paused
+        running: !root.paused && root._liveEvent === null
         onTriggered: root._advance()
     }
 
@@ -75,7 +84,7 @@ Item {
         spacing: 0
 
         Text {
-            text: root._display
+            text: root._liveEvent ? root._liveEvent.typed : root._display
             font.family: Theme.monoFamily
             font.pixelSize: 13
             color: Theme.ink80
@@ -84,7 +93,10 @@ Item {
 
         // Ghost-text suggestion (static after prefix, representing AI suggestion)
         Text {
-            text: root._typing ? root.demoSequences[root._seqIdx].suffix.slice(root._charIdx) : ""
+            text: {
+                if (root._liveEvent) return root._liveEvent.ghost || ""
+                return root._typing ? root.demoSequences[root._seqIdx].suffix.slice(root._charIdx) : ""
+            }
             font.family: Theme.monoFamily
             font.pixelSize: 13
             color: Theme.ink25
