@@ -13,6 +13,8 @@
 #endif
 
 #include "config_store.h"
+#include "engine_probe.h"
+#include "reloader.h"
 
 class GrainProvider : public QQuickImageProvider {
 public:
@@ -51,9 +53,14 @@ int main(int argc, char** argv) {
     if (QFontDatabase::addApplicationFont(fontBase + "JetBrainsMono-Variable.ttf") < 0)
         qWarning() << "xtype-settings: failed to load JetBrains Mono Variable font";
 
-    static ConfigStore configStore;
+    static ConfigStore  configStore;
+    static EngineProbe  engineProbe;
+    static Reloader     reloader;
+
     configStore.load();
-    qmlRegisterSingletonInstance<ConfigStore>("XType.Settings", 1, 0, "Config", &configStore);
+    qmlRegisterSingletonInstance<ConfigStore> ("XType.Settings", 1, 0, "Config",   &configStore);
+    qmlRegisterSingletonInstance<EngineProbe> ("XType.Settings", 1, 0, "Engine",   &engineProbe);
+    qmlRegisterSingletonInstance<Reloader>    ("XType.Settings", 1, 0, "Reloader", &reloader);
 
     QQmlApplicationEngine engine;
     engine.addImageProvider("grain", new GrainProvider);   // must precede loadFromModule

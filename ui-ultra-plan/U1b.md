@@ -18,7 +18,7 @@
 
 ---
 
-## Step 5 — Primitives library
+## [x] Step 5 — Primitives library
 
 Files: every `qml/primitives/X*.qml` listed in §3 that wasn't built
 in U1a Step 4 (the four already there — `XTitleBar`, `XSidebar`,
@@ -70,7 +70,7 @@ Commit: `feat(settings): primitive library (toggle, slider, pill, segmented, row
 
 ---
 
-## Step 6 — `ConfigStore` C++ backend + round-trip tests
+## [x] Step 6 — `ConfigStore` C++ backend + round-trip tests
 
 Files: `src/config_store.{h,cpp}`,
 `settings/qt6-app/tests/test_config_store.cpp`,
@@ -189,7 +189,7 @@ Commit: `feat(settings): config store with toml round-trip + atomic save + tests
 
 ---
 
-## Step 7 — `EngineProbe` + `Reloader` + sidebar wiring
+## [x] Step 7 — `EngineProbe` + `Reloader` + sidebar wiring
 
 Files: `src/engine_probe.{h,cpp}`, `src/reloader.{h,cpp}`,
 `qml/primitives/XSidebar.qml` (update — currently shows zeros from

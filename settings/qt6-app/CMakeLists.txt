@@ -20,9 +20,12 @@ configure_file(src/build_info.h.in ${CMAKE_CURRENT_BINARY_DIR}/build_info.h @ONL
 qt_add_executable(xtype-settings
     src/main.cpp
     src/config_store.cpp
+    src/engine_probe.cpp
+    src/reloader.cpp
 )
 
-set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+set_source_files_properties(qml/Theme.qml        PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+set_source_files_properties(qml/ReloadCenter.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
 qt_add_qml_module(xtype-settings
     URI XType.Settings
@@ -30,6 +33,7 @@ qt_add_qml_module(xtype-settings
     QML_FILES
         qml/App.qml
         qml/Theme.qml
+        qml/ReloadCenter.qml
         qml/primitives/XEngineDot.qml
         qml/primitives/XGrain.qml
         qml/primitives/XMiniBar.qml

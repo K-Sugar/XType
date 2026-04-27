@@ -70,6 +70,60 @@ Window {
             }
         }
 
+        // Reload banner — slides up from the bottom when dirty
+        Rectangle {
+            id: reloadBanner
+            anchors { left: parent.left; right: parent.right; leftMargin: 1; rightMargin: 1 }
+            height: 44
+            radius: 0
+            color: ReloadCenter.lastReloadOk ? Qt.rgba(0.518, 0.431, 0.918, 0.18)
+                                             : Qt.rgba(1.0, 0.37, 0.37, 0.18)
+            border.width: 1
+            border.color: ReloadCenter.lastReloadOk ? Qt.rgba(0.655, 0.545, 0.980, 0.30)
+                                                    : Qt.rgba(1.0, 0.37, 0.37, 0.40)
+            y: ReloadCenter.dirty ? parent.height - height - 1 : parent.height
+            Behavior on y { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+            clip: true
+
+            Row {
+                anchors.centerIn: parent
+                spacing: 12
+
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: ReloadCenter.inflight       ? "Reloading fcitx5…"
+                        : ReloadCenter.lastReloadOk   ? "Settings saved — click to reload fcitx5"
+                                                      : "Reload failed — check logs"
+                    font.family: Theme.sansFamily; font.pixelSize: 12
+                    color: ReloadCenter.lastReloadOk ? Theme.purpleSoft : "#ff8a8a"
+                    renderType: Text.NativeRendering
+                }
+
+                Rectangle {
+                    visible: !ReloadCenter.inflight
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: retryLabel.implicitWidth + 20; height: 26; radius: 5
+                    color: Qt.rgba(0.518, 0.431, 0.918, 0.18)
+                    border.width: 1; border.color: Qt.rgba(0.655, 0.545, 0.980, 0.30)
+
+                    Text {
+                        id: retryLabel
+                        anchors.centerIn: parent
+                        text: ReloadCenter.lastReloadOk ? "Reload" : "Retry"
+                        font.family: Theme.sansFamily; font.pixelSize: 11
+                        color: Theme.purpleSoft
+                        renderType: Text.NativeRendering
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: Reloader.reload()
+                    }
+                }
+            }
+        }
+
         // Grain overlay — on top of all content
         XGrain { anchors.fill: parent }
     }

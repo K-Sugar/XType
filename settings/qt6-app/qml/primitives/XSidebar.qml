@@ -152,13 +152,13 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
             }
             XMiniBar {
-                value: 0.18
+                value: Engine.cpuPct / 100.0
                 anchors.verticalCenter: parent.verticalCenter
                 width: parent.width - cpuLabel.implicitWidth - 38
             }
             Text {
                 id: cpuLabel
-                text: "18%"
+                text: Engine.cpuPct + "%"
                 font.family: Theme.monoFamily; font.pixelSize: 11
                 color: Theme.ink80
                 renderType: Text.NativeRendering
@@ -179,13 +179,13 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
             }
             XMiniBar {
-                value: 0.35
+                value: Math.min(1.0, Engine.ramGb / 4.0)
                 anchors.verticalCenter: parent.verticalCenter
                 width: parent.width - ramLabel.implicitWidth - 38
             }
             Text {
                 id: ramLabel
-                text: "1.4 GB"
+                text: Engine.ramGb.toFixed(1) + " GB"
                 font.family: Theme.monoFamily; font.pixelSize: 11
                 color: Theme.ink80
                 renderType: Text.NativeRendering
@@ -196,9 +196,9 @@ Item {
         // Engine line
         Row {
             spacing: 8
-            XEngineDot { active: true; anchors.verticalCenter: parent.verticalCenter }
+            XEngineDot { active: Engine.state === "ready"; anchors.verticalCenter: parent.verticalCenter }
             Text {
-                text: "engine running"
+                text: Engine.state === "ready" ? "engine running" : Engine.state
                 font.family: Theme.sansFamily; font.pixelSize: 11
                 color: Theme.ink65
                 renderType: Text.NativeRendering
