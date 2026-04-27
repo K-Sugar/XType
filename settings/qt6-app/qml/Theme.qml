@@ -34,5 +34,5 @@ QtObject {
     readonly property var spacing: ({ row: 12, section: 28, page: 22 })
     readonly property var radius:  ({ window: 14, card: 10, pill: 999, btn: 7 })
     readonly property var ease:    ({ standard: [0.4,0,0.2,1], bouncy: [0.34,1.4,0.6,1] })
-    readonly property var fontSize:({ row: 13.5, label: 11.5, mono: 12 })
+    readonly property var fontSize:({ row: 14, label: 12, mono: 12 })
 }

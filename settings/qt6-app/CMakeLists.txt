@@ -20,13 +20,19 @@ qt_add_executable(xtype-settings
     # TUs added in U1b (config_store, engine_probe, …) — list grows then.
 )
 
+set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+
 qt_add_qml_module(xtype-settings
     URI XType.Settings
     VERSION 1.0
     QML_FILES
         qml/App.qml
         qml/Theme.qml
+        qml/primitives/XEngineDot.qml
         qml/primitives/XGrain.qml
+        qml/primitives/XMiniBar.qml
+        qml/primitives/XSidebar.qml
+        qml/primitives/XTitleBar.qml
     RESOURCES
         data/icons/xtype.svg
         data/fonts/Inter-Variable.ttf

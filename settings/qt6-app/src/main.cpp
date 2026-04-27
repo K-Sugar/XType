@@ -6,6 +6,10 @@
 #include <QQuickImageProvider>
 #include <QImage>
 #include <QDebug>
+#ifdef HAVE_KF6_WINDOW_SYSTEM
+#include <KWindowSystem>
+#include <KWindowEffects>
+#endif
 
 class GrainProvider : public QQuickImageProvider {
 public:
@@ -49,13 +53,12 @@ int main(int argc, char** argv) {
     engine.loadFromModule("XType.Settings", "App");
     if (engine.rootObjects().isEmpty()) return -1;
 
-    // Uncomment in Step 4 (de-risked in Step 2.5: KWin blur confirmed on Plasma 6 Wayland):
-    // #ifdef HAVE_KF6_WINDOW_SYSTEM
-    // if (KWindowSystem::isPlatformWayland()) {
-    //     if (auto *win = qobject_cast<QQuickWindow*>(engine.rootObjects().first()))
-    //         KWindowEffects::enableBlurBehind(win, true);
-    // }
-    // #endif
+#ifdef HAVE_KF6_WINDOW_SYSTEM
+    if (KWindowSystem::isPlatformWayland()) {
+        if (auto *win = qobject_cast<QQuickWindow*>(engine.rootObjects().first()))
+            KWindowEffects::enableBlurBehind(win, true);
+    }
+#endif
 
     return app.exec();
 }
