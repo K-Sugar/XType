@@ -9,6 +9,7 @@ Item {
     property real max: 100
     property real step: 1
     property bool comingSoon: false
+    property var formatFn: null
     signal committed(real v)
 
     implicitWidth: 220
@@ -23,7 +24,7 @@ Item {
         id: valueLabel
         anchors { right: parent.right; verticalCenter: parent.verticalCenter }
         width: 56
-        text: Math.round(root.value)
+        text: root.formatFn ? root.formatFn(root.value) : Math.round(root.value)
         font.family: Theme.monoFamily; font.pixelSize: 11
         color: Theme.ink65
         horizontalAlignment: Text.AlignRight

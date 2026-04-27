@@ -94,13 +94,11 @@ Item {
                         XPill {
                             label: "Enter"
                             on: Config.acceptKey === "enter"
-                            comingSoon: true
                             onClicked: Config.acceptKey = "enter"
                         }
                         XPill {
                             label: "→"
                             on: Config.acceptKey === "right"
-                            comingSoon: true
                             onClicked: Config.acceptKey = "right"
                         }
                     }

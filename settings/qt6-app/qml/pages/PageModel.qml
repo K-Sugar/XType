@@ -130,13 +130,10 @@ Item {
                     width: parent.width
                     XSlider {
                         min: 1; max: 12; step: 1
-                        value: Config.threads.valid ? Config.threads : 4
-                        comingSoon: true
+                        value: Config.threads.valid ? Config.threads : 0
+                        formatFn: function(v) { return (v === null || v === undefined || v === 0) ? "auto" : v + " threads" }
                         width: 200
                         onCommitted: (v) => Config.threads = v
-
-                        ToolTip.text: "Not yet wired into the engine"
-                        ToolTip.visible: comingSoon && hovered
                     }
                 }
             }
