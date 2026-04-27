@@ -95,12 +95,8 @@ Item {
                     XSlider {
                         min: 0; max: 100; step: 5
                         value: Config.voiceStrength
-                        comingSoon: true
                         width: 200
                         onCommitted: (v) => Config.voiceStrength = v
-
-                        ToolTip.text: "Not yet wired into the engine"
-                        ToolTip.visible: comingSoon && hovered
                     }
                 }
                 XRow {
