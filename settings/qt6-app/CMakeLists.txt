@@ -33,6 +33,21 @@ qt_add_qml_module(xtype-settings
         qml/primitives/XMiniBar.qml
         qml/primitives/XSidebar.qml
         qml/primitives/XTitleBar.qml
+        qml/primitives/XToggle.qml
+        qml/primitives/XSlider.qml
+        qml/primitives/XPill.qml
+        qml/primitives/XSegmented.qml
+        qml/primitives/XSection.qml
+        qml/primitives/XRow.qml
+        qml/primitives/XBars.qml
+        qml/primitives/XButton.qml
+        qml/primitives/XInput.qml
+        qml/primitives/XCard.qml
+        qml/primitives/XAppRow.qml
+        qml/primitives/XAppIcon.qml
+        qml/primitives/XKbd.qml
+        qml/primitives/XPhraseRow.qml
+        qml/primitives/XLogList.qml
     RESOURCES
         data/icons/xtype.svg
         data/fonts/Inter-Variable.ttf

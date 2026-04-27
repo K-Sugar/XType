@@ -5,3 +5,4 @@ build/
 *.so
 *.o
 .cache/
+qml/primitives/Demo.qml
