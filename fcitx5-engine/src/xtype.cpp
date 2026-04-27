@@ -634,16 +634,17 @@ void XTypeEngine::applyPrompt() {
     in.userDescription = _cfg.user_prompt.description;
     in.avoidPhrases    = _cfg.user_prompt.avoid_phrases;
 
-    // voice_strength (0–100) limits exemplar count. At 0: suppress entirely.
-    if (_profile && !_profile->exemplars().empty() &&
-        _cfg.learning.voice_strength < 100) {
-        size_t maxEx = (_cfg.learning.voice_strength == 0)
-            ? 0
-            : static_cast<size_t>(
-                std::ceil(_profile->exemplars().size() *
-                          (_cfg.learning.voice_strength / 100.0)));
-        if (maxEx == 0)
+    // voice_strength: 0 = no exemplars, 100 = all, 1–99 = proportional slice.
+    if (_profile && !_profile->exemplars().empty() && in.includeExamples) {
+        const auto& all = _profile->exemplars();
+        size_t count = static_cast<size_t>(
+            std::ceil(all.size() * std::clamp(_cfg.learning.voice_strength, 0, 100) / 100.0));
+        if (count == 0) {
             in.includeExamples = false;
+        } else if (count < all.size()) {
+            in.exemplarsOverride = std::vector<std::string>(all.begin(), all.begin() + count);
+        }
+        // count == all.size(): use default path (exemplarsOverride empty)
     }
 
     // Tone: append a short style modifier when a non-default tone is set.

@@ -38,7 +38,9 @@ std::string buildSystemPrompt(const PromptInputs& in, bool* truncated) {
     if (truncated) *truncated = false;
 
     std::vector<std::string> exemplars;
-    if (in.includeExamples && in.profile && !in.profile->exemplars().empty()) {
+    if (!in.exemplarsOverride.empty()) {
+        exemplars = in.exemplarsOverride;
+    } else if (in.includeExamples && in.profile && !in.profile->exemplars().empty()) {
         exemplars = in.profile->exemplars();
     }
 

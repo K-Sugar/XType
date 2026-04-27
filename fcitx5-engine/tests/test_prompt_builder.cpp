@@ -175,6 +175,15 @@ TEST_CASE("prompt respects budget") {
     REQUIRE(truncated);
 }
 
+TEST_CASE("exemplarsOverride takes precedence over profile") {
+    PromptInputs in;
+    in.base = "Base.";
+    in.exemplarsOverride = {"only this exemplar"};
+    in.budgetChars = 2000;
+    auto p = buildSystemPrompt(in);
+    REQUIRE(p.find("only this exemplar") != std::string::npos);
+}
+
 TEST_CASE("drops all exemplars before truncating description", "[prompt][budget]") {
     auto sp = profileWith({
         std::string(400, 'a') + " sentence ends here",
