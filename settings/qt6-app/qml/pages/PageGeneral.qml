@@ -4,6 +4,7 @@ import XType.Settings 1.0
 
 Item {
     Flickable {
+        id: flick
         anchors.fill: parent
         contentHeight: col.implicitHeight + 44
         clip: true
@@ -16,7 +17,7 @@ Item {
         Column {
             id: col
             x: 28; y: 22
-            width: parent.width - 56
+            width: flick.width - 56
             spacing: Theme.spacing.section
 
             // ── 01 Engine ──────────────────────────────────────────────────

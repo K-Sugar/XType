@@ -16,6 +16,7 @@ Item {
             height: parent.height
 
             Flickable {
+                id: leftFlick
                 anchors { fill: parent; topMargin: 22; leftMargin: 28 }
                 contentHeight: appCol.implicitHeight + 44
                 clip: true
@@ -27,7 +28,7 @@ Item {
 
                 Column {
                     id: appCol
-                    width: parent.width - 28
+                    width: leftFlick.width - 28
                     spacing: 6
 
                     XSection { title: "Per-app settings"; num: "01"; width: parent.width }
@@ -62,13 +63,14 @@ Item {
             height: parent.height
 
             Flickable {
+                id: rightFlick
                 anchors { fill: parent; topMargin: 22; rightMargin: 28 }
                 contentHeight: detailCard.implicitHeight + 44
                 clip: true
 
                 XCard {
                     id: detailCard
-                    width: parent.width
+                    width: rightFlick.width
                     visible: root.selectedId !== ""
 
                     Column {

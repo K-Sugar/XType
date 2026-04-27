@@ -10,6 +10,7 @@ Item {
     property string _pendingModel: ""
 
     Flickable {
+        id: flick
         anchors.fill: parent
         contentHeight: col.implicitHeight + 44
         clip: true
@@ -22,7 +23,7 @@ Item {
         Column {
             id: col
             x: 28; y: 22
-            width: parent.width - 56
+            width: flick.width - 56
             spacing: Theme.spacing.section
 
             // ── 01 Active model ────────────────────────────────────────────
