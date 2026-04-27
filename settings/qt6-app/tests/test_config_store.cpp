@@ -170,6 +170,64 @@ TEST_CASE("apps: only present keys survive, absent optionals stay absent", "[con
 }
 
 // ------------------------------------------------------------------ 5
+TEST_CASE("temperature and top_p round-trip", "[config_store]") {
+    QTemporaryDir tmp; REQUIRE(tmp.isValid());
+    const QString dst = tmp.filePath("config.toml");
+
+    {
+        ConfigStore cs(dst);
+        cs.load();
+        cs.setTemperature(0.7);
+        cs.setTopP(0.8);
+        cs.saveNow();
+    }
+
+    ConfigStore cs2(dst);
+    cs2.load();
+
+    CHECK(cs2.temperature() == Catch::Approx(0.7).margin(1e-6));
+    CHECK(cs2.topP()        == Catch::Approx(0.8).margin(1e-6));
+}
+
+// ------------------------------------------------------------------ 6
+TEST_CASE("stop_tokens round-trip", "[config_store]") {
+    QTemporaryDir tmp; REQUIRE(tmp.isValid());
+    const QString dst = tmp.filePath("config.toml");
+
+    {
+        ConfigStore cs(dst);
+        cs.load();
+        cs.setStopTokens({".", "\n"});
+        cs.saveNow();
+    }
+
+    ConfigStore cs2(dst);
+    cs2.load();
+
+    CHECK(cs2.stopTokens() == QStringList({".", "\n"}));
+}
+
+// ------------------------------------------------------------------ 7
+TEST_CASE("max_corpus_mb and min_sentence_chars round-trip", "[config_store]") {
+    QTemporaryDir tmp; REQUIRE(tmp.isValid());
+    const QString dst = tmp.filePath("config.toml");
+
+    {
+        ConfigStore cs(dst);
+        cs.load();
+        cs.setMaxCorpusMb(25);
+        cs.setMinSentenceChars(8);
+        cs.saveNow();
+    }
+
+    ConfigStore cs2(dst);
+    cs2.load();
+
+    CHECK(cs2.maxCorpusMb()      == 25);
+    CHECK(cs2.minSentenceChars() == 8);
+}
+
+// ------------------------------------------------------------------ 8
 TEST_CASE("resetAll: backup file exists, main file reverts to defaults", "[config_store]") {
     QTemporaryDir tmp; REQUIRE(tmp.isValid());
     const QString dst = tmp.filePath("config.toml");
