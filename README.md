@@ -146,7 +146,7 @@ systemctl --user enable --now ollama
 ### 4.3 Build & install the Fcitx5 engine (production)
 
 ```bash
-git clone https://github.com/<your-user>/XType.git
+git clone https://github.com/K-Sugar/XType.git
 cd XType/fcitx5-engine
 
 cmake -B build -G Ninja -DFCITX_INSTALL_USE_FCITX_SYS_PATHS=ON
