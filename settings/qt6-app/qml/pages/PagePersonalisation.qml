@@ -216,6 +216,7 @@ Item {
                     width: parent.width
                     XInput {
                         width: 280
+                        maximumLength: 500
                         placeholderText: "e.g. Senior engineer who writes tersely"
                         text: Config.userDescription
                         onEditingFinished: Config.userDescription = text

@@ -680,6 +680,17 @@ void XTypeEngine::applyPrompt() {
     in.userDescription = _cfg.user_prompt.description;
     in.avoidPhrases    = _cfg.user_prompt.avoid_phrases;
 
+    // Cap user description at 500 chars to keep within prompt budget.
+    // The budget enforcer in buildSystemPrompt truncates at character level;
+    // truncating at a higher level here ensures the description ends on a
+    // word boundary.
+    static constexpr size_t kMaxDescLen = 500;
+    if (in.userDescription.size() > kMaxDescLen) {
+        size_t cut = in.userDescription.rfind(' ', kMaxDescLen);
+        in.userDescription.resize(cut != std::string::npos ? cut : kMaxDescLen);
+        log_warn("user description truncated to fit prompt budget");
+    }
+
     // voice_strength: 0 = no exemplars, 100 = all, 1–99 = proportional slice.
     if (_profile && !_profile->exemplars().empty() && in.includeExamples) {
         const auto& all = _profile->exemplars();

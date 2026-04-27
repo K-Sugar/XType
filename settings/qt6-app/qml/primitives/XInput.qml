@@ -6,6 +6,7 @@ Item {
     id: root
     property alias text: tf.text
     property alias placeholderText: tf.placeholderText
+    property alias maximumLength: tf.maximumLength
     property bool comingSoon: false
     signal editingFinished()
 
