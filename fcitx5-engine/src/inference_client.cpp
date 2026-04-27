@@ -111,7 +111,7 @@ static std::string build_payload(const InferenceConfig& cfg,
     // Assistant-prefill: context is placed in an incomplete assistant turn.
     // The model continues its own text, bypassing the chat-response pattern that
     // fires when conversational text appears in the user role.
-    return std::string(R"({"model":")") + json_escape(cfg.model)
+    std::string payload = std::string(R"({"model":")") + json_escape(cfg.model)
          + R"(","messages":[)"
          + R"({"role":"system","content":")"    + json_escape(system_prompt) + R"("},)"
          + R"({"role":"assistant","content":")" + json_escape(context) + R"("})"
@@ -119,7 +119,13 @@ static std::string build_payload(const InferenceConfig& cfg,
          + std::to_string(cfg.num_predict)
          + R"(,"temperature":)" + temp_buf
          + R"(,"top_p":)"      + top_p_buf
-         + R"(,"stop":)"       + stop_arr + "}}";
+         + R"(,"stop":)"       + stop_arr;
+
+    if (cfg.threads.has_value())
+        payload += R"(,"num_thread":)" + std::to_string(*cfg.threads);
+
+    payload += "}}";
+    return payload;
 }
 
 // ── CURL write callbacks ──────────────────────────────────────────────────────
