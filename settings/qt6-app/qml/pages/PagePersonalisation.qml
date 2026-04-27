@@ -163,7 +163,106 @@ Item {
                 }
             }
 
+            // ── 03 Your voice settings ────────────────────────────────────
+            XSection { title: "Your voice"; num: "03"; width: parent.width }
+
+            Column {
+                width: parent.width
+                spacing: 0
+
+                XRow {
+                    label: "About you"
+                    desc: "One sentence about your writing context. Included in the AI prompt."
+                    width: parent.width
+                    XInput {
+                        width: 280
+                        placeholderText: "e.g. Senior engineer who writes tersely"
+                        text: Config.userDescription
+                        onEditingFinished: Config.userDescription = text
+                    }
+                }
+
+                XRow {
+                    label: "Tone"
+                    desc: "Adjusts the style modifier added to the AI prompt."
+                    isLast: true
+                    width: parent.width
+                    XSegmented {
+                        options: ["Default", "Casual", "Professional", "Technical", "Concise"]
+                        selectedIndex: {
+                            var t = Config.userTone
+                            if (t === "casual")       return 1
+                            if (t === "professional") return 2
+                            if (t === "technical")    return 3
+                            if (t === "concise")      return 4
+                            return 0
+                        }
+                        onSelected: function(i) {
+                            var tones = ["", "casual", "professional", "technical", "concise"]
+                            Config.userTone = tones[i]
+                        }
+                    }
+                }
+            }
+
+            // ── 04 Phrases to avoid ────────────────────────────────────────
+            XSection { title: "Phrases to avoid"; num: "04"; width: parent.width }
+
+            Row {
+                width: parent.width
+                spacing: 8
+                XInput {
+                    id: avoidInput
+                    placeholderText: "Add phrase…"
+                    width: parent.width - avoidAddBtn.width - 8
+                    Keys.onReturnPressed: addAvoidPhrase()
+                }
+                XButton {
+                    id: avoidAddBtn
+                    label: "Add"
+                    onClicked: addAvoidPhrase()
+                }
+            }
+
+            Column {
+                width: parent.width
+                spacing: 4
+
+                Repeater {
+                    model: Config.userAvoidPhrases
+                    delegate: XPhraseRow {
+                        required property string modelData
+                        required property int index
+                        phrase: modelData
+                        width: parent ? parent.width : 0
+                        onRemoveClicked: {
+                            let list = Config.userAvoidPhrases.slice()
+                            list.splice(index, 1)
+                            Config.userAvoidPhrases = list
+                        }
+                    }
+                }
+
+                Text {
+                    visible: Config.userAvoidPhrases.length === 0
+                    text: "No phrases added yet."
+                    font.family: Theme.sansFamily; font.pixelSize: 13
+                    color: Theme.ink45
+                    renderType: Text.NativeRendering
+                }
+            }
+
             Item { height: 8 }
+        }
+    }
+
+    function addAvoidPhrase() {
+        var p = avoidInput.text.trim()
+        if (p.length > 0) {
+            var list = Config.userAvoidPhrases.slice()
+            list.push(p)
+            Config.userAvoidPhrases = list
+            avoidInput.text = ""
         }
     }
 

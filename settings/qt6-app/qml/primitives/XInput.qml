@@ -7,6 +7,7 @@ Item {
     property alias text: tf.text
     property alias placeholderText: tf.placeholderText
     property bool comingSoon: false
+    signal editingFinished()
 
     implicitWidth: 240
     implicitHeight: 38
@@ -20,6 +21,11 @@ Item {
         color: "transparent"
         border.width: 3
         border.color: Qt.rgba(0.518, 0.431, 0.918, 0.10)
+    }
+
+    Connections {
+        target: tf
+        function onEditingFinished() { root.editingFinished() }
     }
 
     TextField {
