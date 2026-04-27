@@ -56,15 +56,15 @@ XType via `fcitx5-configtool` (XType should appear in Input Methods).
 
 | # | Step | Expected | Result |
 |---|------|----------|--------|
-| K1 | Open Kate, click in editor | Engine receives focus | |
-| K2 | Type a few words | Characters appear normally | |
-| K3 | Pause ~300ms | Ghost text (grey underline) appears | |
-| K4 | Press Tab | Next word of suggestion committed | |
-| K5 | Press Shift+Tab | Entire remaining suggestion committed | |
-| K6 | Type more, press Escape | Ghost text clears, nothing committed | |
-| K7 | Type more, press Backspace with ghost text | Ghost text clears, typed char stays | |
-| K8 | Click away to another window mid-suggestion | Suggestion dismissed (not inserted) | |
-| K9 | Click back into Kate | Fresh state, no stale preedit | |
+| K1 | Open Kate, click in editor | Engine receives focus | Confirmed |
+| K2 | Type a few words | Characters appear normally | Confirmed |
+| K3 | Pause ~300ms | Ghost text (grey underline) appears | Confirmed |
+| K4 | Press Tab | Next word of suggestion committed | Confirmed |
+| K5 | Press Shift+Tab | Entire remaining suggestion committed | Confirmed |
+| K6 | Type more, press Escape | Ghost text clears, nothing committed | Confirmed |
+| K7 | Type more, press Backspace with ghost text | Ghost text clears, typed char stays | Confirmed |
+| K8 | Click away to another window mid-suggestion | Suggestion dismissed (not inserted) | Confirmed |
+| K9 | Click back into Kate | Fresh state, no stale preedit | Confirmed |
 
 **Notes:**
 

@@ -3,7 +3,7 @@
 
   ## Sub-session
 
-  I am running sub-session: <U1a>
+  I am running sub-session: <U1c>
 
   ## Read order (do this first, in this exact order)
 

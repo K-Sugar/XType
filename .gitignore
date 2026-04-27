@@ -5,4 +5,4 @@ build/
 *.so
 *.o
 .cache/
-qml/primitives/Demo.qml
+settings/qt6-app/qml/primitives/Demo.qml
