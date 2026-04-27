@@ -60,7 +60,6 @@ qt_add_qml_module(xtype-settings
         qml/primitives/XKbd.qml
         qml/primitives/XPhraseRow.qml
         qml/primitives/XLogList.qml
-        qml/pages/LiveDemo.qml
         qml/pages/PageGeneral.qml
         qml/pages/PageBlockList.qml
         qml/pages/PagePerApp.qml

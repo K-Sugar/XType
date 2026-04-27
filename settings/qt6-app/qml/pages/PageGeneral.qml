@@ -123,26 +123,44 @@ Item {
                 }
             }
 
-            // ── Live preview ───────────────────────────────────────────────
-            XSection { title: "Live preview"; width: parent.width }
+            // ── 03 Live preview ────────────────────────────────────────────
+            XSection { title: "Live preview"; num: "03"; width: parent.width }
 
             XCard {
                 width: parent.width
-                height: demo.implicitHeight + 32
+                height: 110
 
                 Text {
                     x: 0; y: 0
-                    text: "Ghost text typewriter"
+                    text: "Type here to test suggestions"
                     font.family: Theme.sansFamily; font.pixelSize: 11
                     font.capitalization: Font.AllUppercase; font.letterSpacing: 1.2
                     color: Theme.ink45
                     renderType: Text.NativeRendering
                 }
 
-                LiveDemo {
-                    id: demo
-                    anchors { top: parent.top; topMargin: 22; left: parent.left; right: parent.right }
-                    paused: !Config.engineEnabled
+                ScrollView {
+                    id: liveScroll
+                    anchors {
+                        top: parent.top; topMargin: 22
+                        left: parent.left; right: parent.right; bottom: parent.bottom
+                    }
+                    clip: true
+                    enabled: Config.engineEnabled
+                    opacity: Config.engineEnabled ? 1.0 : 0.45
+                    ScrollBar.vertical.policy: ScrollBar.AlwaysOff
+                    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+
+                    TextArea {
+                        id: liveInput
+                        width: liveScroll.availableWidth
+                        placeholderText: "Start typing…"
+                        font.family: Theme.monoFamily; font.pixelSize: 13
+                        color: Theme.ink100
+                        wrapMode: TextArea.Wrap
+                        background: null
+                        renderType: Text.NativeRendering
+                    }
                 }
             }
 
