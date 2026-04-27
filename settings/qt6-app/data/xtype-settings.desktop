@@ -5,6 +5,6 @@ Exec=xtype-settings
 Icon=xtype
 Terminal=false
 Type=Application
-Categories=Settings;InputMethod;Qt;
+Categories=Settings;Qt;
 StartupNotify=true
 StartupWMClass=xtype-settings
