@@ -334,8 +334,16 @@ void XTypeEngine::keyEvent(const fcitx::InputMethodEntry &,
         _ctx.appendChar(ch);
 
         // User-typed-only buffer for corpus harvest (excludes AI accept paths).
-        if (_userTypedSinceLastTerminator.size() >= kUserBufCap)
-            _userTypedSinceLastTerminator.erase(0, kUserBufCap / 2);
+        // Rolling strategy: on overflow, erase through the next sentence terminator
+        // so the remainder starts at a clean sentence boundary.
+        if (_userTypedSinceLastTerminator.size() >= kUserBufCap) {
+            auto& buf = _userTypedSinceLastTerminator;
+            size_t pos = buf.find_first_of(".!?", kUserBufCap / 2);
+            if (pos != std::string::npos && pos + 1 < buf.size())
+                buf.erase(0, pos + 1);
+            else
+                buf.clear();
+        }
         _userTypedSinceLastTerminator.push_back(ch);
         if (ch == '.' || ch == '!' || ch == '?')
             harvestSentence(ic->program());
@@ -413,12 +421,12 @@ void XTypeEngine::requestInference(
                         while (!s.empty() &&
                                std::isspace(static_cast<unsigned char>(s.back())))
                             s.pop_back();
-                        const std::string ctx = _ctx.contextText();
+                        const std::string ctxText = _ctx.contextText();
                         // Strip tail-of-context echo: model repeats recently typed text.
                         constexpr size_t kMaxCheck = 80;
-                        size_t check = std::min({s.size(), ctx.size(), kMaxCheck});
+                        size_t check = std::min({s.size(), ctxText.size(), kMaxCheck});
                         for (size_t len = check; len >= 4; --len) {
-                            if (ctx.compare(ctx.size() - len, len, s, 0, len) == 0) {
+                            if (ctxText.compare(ctxText.size() - len, len, s, 0, len) == 0) {
                                 s.erase(0, len);
                                 break;
                             }
@@ -428,13 +436,13 @@ void XTypeEngine::requestInference(
                         // Case-insensitive match on the first 12 chars is enough to
                         // identify this pattern without false-positives on short words.
                         constexpr size_t kHeadCheck = 12;
-                        if (!s.empty() && s.size() >= kHeadCheck && ctx.size() >= kHeadCheck) {
+                        if (!s.empty() && s.size() >= kHeadCheck && ctxText.size() >= kHeadCheck) {
                             auto lower = [](std::string t) {
                                 std::transform(t.begin(), t.end(), t.begin(),
                                                [](unsigned char c){ return std::tolower(c); });
                                 return t;
                             };
-                            if (lower(s.substr(0, kHeadCheck)) == lower(ctx.substr(0, kHeadCheck)))
+                            if (lower(s.substr(0, kHeadCheck)) == lower(ctxText.substr(0, kHeadCheck)))
                                 s.clear();
                         }
                         _ctx.setSuggestion(std::move(s));
