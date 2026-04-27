@@ -6,3 +6,12 @@ build/
 *.o
 .cache/
 settings/qt6-app/qml/primitives/Demo.qml
+
+# Claude Code and planning files — kept locally, not tracked
+.claude/
+.obsidian/
+CLAUDE.md
+PLAN.md
+PLANS/
+fcitx5-engine/build-warn/
+*.log
