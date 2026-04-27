@@ -4,9 +4,12 @@
 #include <array>
 #include <cctype>
 #include <chrono>
+#include <ctime>
 #include <fstream>
+#include <string>
 #include <system_error>
 #include <utility>
+#include <vector>
 
 #include "path_utils.h"
 
@@ -103,6 +106,56 @@ bool CorpusCollector::isHardBlocked(std::string_view program) {
     return false;
 }
 
+void CorpusCollector::pruneOldEntries(const std::filesystem::path& corpus_path, int days) {
+    if (days <= 0) return;
+
+    namespace fs = std::filesystem;
+    auto stem = corpus_path.stem().string();
+    fs::path tp = corpus_path.parent_path() / (stem + "_timestamps.txt");
+
+    std::error_code ec;
+    if (!fs::exists(tp, ec)) return;
+
+    std::ifstream cf(corpus_path);
+    std::ifstream tf(tp);
+    if (!cf || !tf) return;
+
+    std::vector<std::string> lines;
+    std::vector<std::time_t> times;
+    std::string line;
+    while (std::getline(cf, line)) lines.push_back(line);
+    while (std::getline(tf, line)) {
+        try { times.push_back(static_cast<std::time_t>(std::stoll(line))); }
+        catch (...) { times.push_back(0); }
+    }
+
+    std::time_t cutoff = std::time(nullptr) - static_cast<std::time_t>(days) * 86400;
+    std::vector<std::string> kept_lines;
+    std::vector<std::time_t> kept_times;
+    for (size_t i = 0; i < lines.size(); ++i) {
+        std::time_t ts = i < times.size() ? times[i] : 0;
+        if (ts == 0 || ts >= cutoff) {
+            kept_lines.push_back(lines[i]);
+            kept_times.push_back(ts);
+        }
+    }
+
+    // No pruning needed — skip the atomic writes.
+    if (kept_lines.size() == lines.size()) return;
+
+    auto write_atomic = [](const fs::path& dst, const auto& vec, auto to_str) {
+        fs::path tmp = dst.string() + ".tmp";
+        std::ofstream f(tmp);
+        if (!f) return;
+        for (const auto& v : vec) f << to_str(v) << '\n';
+        f.close();
+        std::error_code ec2;
+        fs::rename(tmp, dst, ec2);
+    };
+    write_atomic(corpus_path, kept_lines, [](const std::string& s) { return s; });
+    write_atomic(tp, kept_times, [](std::time_t t) { return std::to_string(t); });
+}
+
 // ── internals ────────────────────────────────────────────────────────────────
 
 bool CorpusCollector::acceptable(const std::string& text) const {
@@ -135,19 +188,30 @@ void CorpusCollector::run() {
 void CorpusCollector::flushLocked(std::deque<std::string>& drained) {
     std::ofstream out(_path, std::ios::app | std::ios::binary);
     if (!out) return;
+
+    namespace fs = std::filesystem;
+    auto tsPath = _path.parent_path() / (_path.stem().string() + "_timestamps.txt");
+    std::ofstream tsOut(tsPath, std::ios::app);
+    std::time_t now = std::time(nullptr);
+
     for (auto& line : drained) {
         out.write(line.data(), static_cast<std::streamsize>(line.size()));
         out.put('\n');
+        if (tsOut) tsOut << now << '\n';
     }
     out.flush();
+    if (tsOut) tsOut.flush();
+
     if (_log) {
         std::error_code ec;
-        auto sz = std::filesystem::file_size(_path, ec);
+        auto sz = fs::file_size(_path, ec);
         std::string msg = "flush: " + std::to_string(drained.size()) +
                           " entries written, file=" +
                           (ec ? std::string("?") : std::to_string(sz)) + " bytes";
         _log(std::move(msg));
     }
+
+    pruneOldEntries(_path, _cfg.forget_after_days);
 }
 
 void CorpusCollector::rotateIfNeeded() {

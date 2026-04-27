@@ -31,6 +31,10 @@ public:
     // user config.
     static bool isHardBlocked(std::string_view program);
 
+    // Prune entries older than `days` (based on companion timestamps file).
+    // No-op if days == 0. Called from the flush thread.
+    static void pruneOldEntries(const std::filesystem::path& corpus_path, int days);
+
     // True if HOME could not be resolved or path is unusable; record() is a no-op.
     bool disabled() const { return _disabled; }
 
