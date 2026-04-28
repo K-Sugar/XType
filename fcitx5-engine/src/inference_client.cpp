@@ -29,9 +29,10 @@ static void iclog(const char *fmt, ...) {
 }
 
 static constexpr char kBaseSystemPrompt[] =
-    "You are an inline text autocomplete engine. Continue the text you are given with a "
-    "few natural words. Output ONLY the continuation. No explanations, no responses, "
-    "no punctuation at the start.";
+    "You are an inline text autocomplete engine. "
+    "Continue the text naturally, completing the current sentence in the same voice and style. "
+    "Output ONLY the continuation — no preamble, no explanation, no re-stating of the input. "
+    "Stop after one complete sentence. Do not add a second sentence.";
 
 // ── JSON helpers ──────────────────────────────────────────────────────────────
 
