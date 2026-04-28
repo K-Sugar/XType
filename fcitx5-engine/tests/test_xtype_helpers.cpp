@@ -56,3 +56,56 @@ TEST_CASE("isBlocked word-boundary: dash separator") {
     CHECK(blockedBy("org.kde.kate", list));
     CHECK(!blockedBy("kate-beta", list));
 }
+
+// ── sentenceAligned ───────────────────────────────────────────────────────────
+
+static std::string_view sentenceAligned(std::string_view s) {
+    for (size_t i = 0; i + 1 < s.size(); ++i) {
+        char c = s[i];
+        if ((c == '.' || c == '!' || c == '?') && s[i + 1] == ' ') {
+            size_t start = i + 2;
+            while (start < s.size() && s[start] == ' ') ++start;
+            if (start < s.size()) return s.substr(start);
+        }
+    }
+    return s;
+}
+
+TEST_CASE("no boundary returns full string", "[sentenceAligned]") {
+    std::string_view s = "hello world";
+    REQUIRE(sentenceAligned(s) == s);
+}
+
+TEST_CASE("single sentence boundary with period", "[sentenceAligned]") {
+    std::string_view s = "First sentence. Second sentence starts here";
+    REQUIRE(sentenceAligned(s) == "Second sentence starts here");
+}
+
+TEST_CASE("exclamation boundary", "[sentenceAligned]") {
+    std::string_view s = "Wow! That was great";
+    REQUIRE(sentenceAligned(s) == "That was great");
+}
+
+TEST_CASE("question boundary", "[sentenceAligned]") {
+    std::string_view s = "Is this working? Yes it is";
+    REQUIRE(sentenceAligned(s) == "Yes it is");
+}
+
+TEST_CASE("multiple boundaries — returns text after first", "[sentenceAligned]") {
+    std::string_view s = "One. Two. Three";
+    REQUIRE(sentenceAligned(s) == "Two. Three");
+}
+
+TEST_CASE("period not followed by space — not a boundary", "[sentenceAligned]") {
+    std::string_view s = "e.g.something here";
+    REQUIRE(sentenceAligned(s) == s);
+}
+
+TEST_CASE("boundary at very end — no text after — returns full string", "[sentenceAligned]") {
+    std::string_view s = "Done. ";
+    REQUIRE(sentenceAligned(s) == s);
+}
+
+TEST_CASE("empty string", "[sentenceAligned]") {
+    REQUIRE(sentenceAligned("") == "");
+}

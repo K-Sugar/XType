@@ -371,6 +371,18 @@ void XTypeEngine::keyEvent(const fcitx::InputMethodEntry &,
 
 // ── Inference ─────────────────────────────────────────────────────────────────
 
+[[maybe_unused]] static std::string_view sentenceAligned(std::string_view s) {
+    for (size_t i = 0; i + 1 < s.size(); ++i) {
+        char c = s[i];
+        if ((c == '.' || c == '!' || c == '?') && s[i + 1] == ' ') {
+            size_t start = i + 2;
+            while (start < s.size() && s[start] == ' ') ++start;
+            if (start < s.size()) return s.substr(start);
+        }
+    }
+    return s;
+}
+
 void XTypeEngine::requestInference(
     fcitx::TrackableObjectReference<fcitx::InputContext> icRef,
     fcitx::InputContext *icPtr)
