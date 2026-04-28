@@ -17,7 +17,8 @@ struct InferenceConfig {
     int                      num_predict       = 30;
     float                    temperature       = 0.3f;
     float                    top_p             = 0.9f;
-    std::vector<std::string> stop_tokens       = {".", "!", "?", "\n"};
+    std::vector<std::string> stop_tokens       = {"\n"};
+    int                      max_sentences     = 1;
     std::optional<int>       threads;            // unset = let Ollama decide
 };
 

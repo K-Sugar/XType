@@ -54,6 +54,17 @@ TEST_CASE("missing file returns defaults without error") {
     CHECK(cfg.inference.model == "qwen2.5:1.5b");
 }
 
+TEST_CASE("max_sentences defaults to 1") {
+    InferenceConfig cfg{};
+    CHECK(cfg.max_sentences == 1);
+}
+
+TEST_CASE("stop_tokens default is newline only") {
+    InferenceConfig cfg{};
+    REQUIRE(cfg.stop_tokens.size() == 1);
+    CHECK(cfg.stop_tokens[0] == "\n");
+}
+
 TEST_CASE("malformed TOML returns defaults without crash") {
     const char* path = "/tmp/xtype_bad_test.toml";
     FILE* f = std::fopen(path, "w");

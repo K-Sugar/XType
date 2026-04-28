@@ -45,6 +45,7 @@ XTypeConfig config_loader::load(const std::string& path) {
                 if (auto s = el.value<std::string>(); s && !s->empty())
                     cfg.inference.stop_tokens.push_back(*s);
         }
+        if (auto v = (*t)["max_sentences"].value<int64_t>()) cfg.inference.max_sentences = (int)*v;
     }
 
     // [behaviour]

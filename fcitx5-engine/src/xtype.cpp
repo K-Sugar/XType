@@ -437,6 +437,20 @@ void XTypeEngine::requestInference(
                         while (!s.empty() &&
                                std::isspace(static_cast<unsigned char>(s.back())))
                             s.pop_back();
+                        // Truncate to at most max_sentences sentence-ending marks.
+                        if (_cfg.inference.max_sentences > 0 && !s.empty()) {
+                            int found = 0;
+                            for (size_t i = 0; i < s.size(); ++i) {
+                                char c = s[i];
+                                if (c == '.' || c == '!' || c == '?') {
+                                    ++found;
+                                    if (found >= _cfg.inference.max_sentences) {
+                                        s.resize(i + 1);
+                                        break;
+                                    }
+                                }
+                            }
+                        }
                         const std::string ctxText = _ctx.contextText();
                         // Strip tail-of-context echo: model repeats recently typed text.
                         constexpr size_t kMaxCheck = 80;
