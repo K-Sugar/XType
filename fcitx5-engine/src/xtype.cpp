@@ -371,7 +371,7 @@ void XTypeEngine::keyEvent(const fcitx::InputMethodEntry &,
 
 // ── Inference ─────────────────────────────────────────────────────────────────
 
-[[maybe_unused]] static std::string_view sentenceAligned(std::string_view s) {
+static std::string_view sentenceAligned(std::string_view s) {
     for (size_t i = 0; i + 1 < s.size(); ++i) {
         char c = s[i];
         if ((c == '.' || c == '!' || c == '?') && s[i + 1] == ' ') {
@@ -393,6 +393,10 @@ void XTypeEngine::requestInference(
     if (static_cast<int>(ctx.size()) > _cfg.inference.context_window)
         ctx = ctx.substr(ctx.size() -
                          static_cast<size_t>(_cfg.inference.context_window));
+    {
+        auto aligned = sentenceAligned(ctx);
+        ctx = std::string(aligned);
+    }
 
     ++_gen;
     ++_metrics.suggestions_generated;

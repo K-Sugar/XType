@@ -13,7 +13,7 @@ struct InferenceConfig {
     std::string              ollama_host       = "http://localhost:11434";
     int                      debounce_ms       = 220;
     int                      min_context_chars = 10;
-    int                      context_window    = 150;
+    int                      context_window    = 400;
     int                      num_predict       = 30;
     float                    temperature       = 0.3f;
     float                    top_p             = 0.9f;
