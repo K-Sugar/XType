@@ -182,6 +182,8 @@ Item {
                                     const v = text.trim()
                                     Config.setApp(AppsKnown.canonicalForId(root.selectedId), "model", v === "" ? null : v)
                                 }
+                                ToolTip.text: "Ollama model name for this app.\nLeave empty to use the global default.\nSmaller: qwen2.5:1.5b (~80ms). Larger: gemma3:4b (~300ms, GPU recommended)."
+                                ToolTip.visible: hovered
                             }
                         }
                     }
