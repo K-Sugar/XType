@@ -404,8 +404,21 @@ void XTypeEngine::requestInference(
     const auto     startUs = fcitx::now(CLOCK_MONOTONIC);
 
     InferenceConfig reqCfg = _cfg.inference;
-    if (auto* ov = currentAppOverride(); ov && ov->num_predict.has_value())
+    // Per-app override wins; otherwise calibrate dynamically.
+    if (auto* ov = currentAppOverride(); ov && ov->num_predict.has_value()) {
         reqCfg.num_predict = *ov->num_predict;
+    } else if (reqCfg.num_predict == 30) {
+        // Only auto-calibrate when the user hasn't changed the default.
+        // avgSentenceLen is in chars; divide by 4 for rough token estimate.
+        if (_profile && _profile->avgSentenceLen() > 0) {
+            int tokens = std::clamp(_profile->avgSentenceLen() / 4, 15, 60);
+            reqCfg.num_predict = tokens;
+        } else {
+            // Depth-based fallback: more context → longer expected completion.
+            int ctxLen = static_cast<int>(ctx.size());
+            reqCfg.num_predict = ctxLen < 50 ? 15 : ctxLen < 150 ? 25 : 40;
+        }
+    }
 
     dbg("requestInference ctx='%.40s...'", ctx.c_str());
     _inference.request(
