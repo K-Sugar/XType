@@ -406,7 +406,8 @@ void XTypeEngine::requestInference(
 
     InferenceConfig reqCfg = _cfg.inference;
     // Per-app override wins; otherwise calibrate dynamically.
-    if (auto* ov = currentAppOverride(); ov && ov->num_predict.has_value()) {
+    const AppOverride* ov = currentAppOverride();
+    if (ov && ov->num_predict.has_value()) {
         reqCfg.num_predict = *ov->num_predict;
     } else if (reqCfg.num_predict == 30) {
         // Only auto-calibrate when the user hasn't changed the default.
@@ -420,6 +421,8 @@ void XTypeEngine::requestInference(
             reqCfg.num_predict = ctxLen < 50 ? 15 : ctxLen < 150 ? 25 : 40;
         }
     }
+    if (ov && ov->model.has_value() && !ov->model->empty())
+        reqCfg.model = *ov->model;
 
     dbg("requestInference ctx='%.40s...'", ctx.c_str());
     auto snapPtr = std::make_shared<std::string>(ctx);  // snapshot; shared ownership

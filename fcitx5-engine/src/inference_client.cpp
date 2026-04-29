@@ -276,7 +276,7 @@ void InferenceClient::run() {
 }
 
 void InferenceClient::execute(Req& req) {
-    iclog("execute: gen=%llu ctx='%.40s'", (unsigned long long)req.gen, req.context.c_str());
+    iclog("execute: gen=%llu model='%s' ctx='%.40s'", (unsigned long long)req.gen, req.cfg.model.c_str(), req.context.c_str());
     CURL* curl = curl_easy_init();
     if (!curl) {
         iclog("execute: curl_easy_init failed");
