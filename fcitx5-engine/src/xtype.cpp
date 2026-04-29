@@ -709,6 +709,8 @@ void XTypeEngine::applyPrompt() {
 
     in.userDescription = _cfg.user_prompt.description;
     in.avoidPhrases    = _cfg.user_prompt.avoid_phrases;
+    if (_profile && !_profile->commonOpeners().empty())
+        in.commonOpeners = _profile->commonOpeners();
 
     // Cap user description at 500 chars to keep within prompt budget.
     // The budget enforcer in buildSystemPrompt truncates at character level;

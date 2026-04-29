@@ -184,6 +184,25 @@ TEST_CASE("exemplarsOverride takes precedence over profile") {
     REQUIRE(p.find("only this exemplar") != std::string::npos);
 }
 
+TEST_CASE("commonOpeners renders opener hint line", "[prompt][openers]") {
+    PromptInputs in{};
+    in.base          = "Base.";
+    in.commonOpeners = {"I think", "In order", "The main"};
+    in.budgetChars   = 2000;
+    auto out = buildSystemPrompt(in);
+    REQUIRE(out.find("often starts sentences with") != std::string::npos);
+    REQUIRE(out.find("I think") != std::string::npos);
+    REQUIRE(out.find("In order") != std::string::npos);
+}
+
+TEST_CASE("empty commonOpeners produces no opener line", "[prompt][openers]") {
+    PromptInputs in{};
+    in.base        = "Base.";
+    in.budgetChars = 2000;
+    auto out = buildSystemPrompt(in);
+    REQUIRE(out.find("often starts sentences with") == std::string::npos);
+}
+
 TEST_CASE("drops all exemplars before truncating description", "[prompt][budget]") {
     auto sp = profileWith({
         std::string(400, 'a') + " sentence ends here",

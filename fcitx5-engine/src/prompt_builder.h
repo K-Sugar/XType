@@ -28,6 +28,7 @@ struct PromptInputs {
     std::vector<std::string> avoidPhrases;          // empty in Session 17
     std::size_t              budgetChars{2000};
     std::vector<std::string> exemplarsOverride;     // if non-empty, replaces profile->exemplars()
+    std::vector<std::string> commonOpeners;         // if non-empty, renders opener hint
 };
 
 // `truncated` (optional out-param) is set to true when any drop happened.

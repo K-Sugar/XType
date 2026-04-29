@@ -9,11 +9,19 @@ namespace {
 std::string assemble(const std::string& base,
                      const std::string& userDesc,
                      const std::vector<std::string>& exemplars,
-                     const std::vector<std::string>& avoid) {
+                     const std::vector<std::string>& avoid,
+                     const std::vector<std::string>& openers) {
     std::string out = base;
     if (!userDesc.empty()) {
         out += "\n\nAbout the user: ";
         out += userDesc;
+    }
+    if (!openers.empty()) {
+        out += "\n\nThis user often starts sentences with: ";
+        for (size_t i = 0; i < openers.size(); ++i) {
+            if (i) out += ", ";
+            out += openers[i];
+        }
     }
     if (!exemplars.empty()) {
         out += "\n\nThe user's typical writing style:";
@@ -44,7 +52,7 @@ std::string buildSystemPrompt(const PromptInputs& in, bool* truncated) {
         exemplars = in.profile->exemplars();
     }
 
-    std::string out = assemble(in.base, in.userDescription, exemplars, in.avoidPhrases);
+    std::string out = assemble(in.base, in.userDescription, exemplars, in.avoidPhrases, in.commonOpeners);
     if (out.size() <= in.budgetChars) return out;
 
     // Drop exemplars longest-first until we fit, or run out.
@@ -54,7 +62,7 @@ std::string buildSystemPrompt(const PromptInputs& in, bool* truncated) {
             [](const auto& a, const auto& b) { return a.size() < b.size(); });
         exemplars.erase(longest);
         if (truncated) *truncated = true;
-        out = assemble(in.base, in.userDescription, exemplars, in.avoidPhrases);
+        out = assemble(in.base, in.userDescription, exemplars, in.avoidPhrases, in.commonOpeners);
     }
     if (out.size() <= in.budgetChars) return out;
 
@@ -64,7 +72,7 @@ std::string buildSystemPrompt(const PromptInputs& in, bool* truncated) {
     while (!userDesc.empty() && out.size() > in.budgetChars) {
         userDesc.pop_back();
         if (truncated) *truncated = true;
-        out = assemble(in.base, userDesc, exemplars, in.avoidPhrases);
+        out = assemble(in.base, userDesc, exemplars, in.avoidPhrases, in.commonOpeners);
     }
     return out;
 }
