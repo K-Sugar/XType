@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <memory>
 #include <cinttypes>
 #include <cmath>
 #include <cstdarg>
@@ -421,21 +422,45 @@ void XTypeEngine::requestInference(
     }
 
     dbg("requestInference ctx='%.40s...'", ctx.c_str());
+    auto snapPtr = std::make_shared<std::string>(ctx);  // snapshot; shared ownership
     _inference.request(
         std::move(ctx),
         std::move(reqCfg),
-        [this, myGen, icRef, icPtr](std::string token) {
+        [this, myGen, icRef, icPtr, snapPtr](std::string token) {
             dbg("token received: '%s' icValid=%d", token.c_str(), (int)icRef.isValid());
             if (!icRef.isValid()) { dbg("on_token: icRef invalid — dropping"); return; }
             _instance->eventDispatcher().scheduleWithContext(
                 icRef,
-                [this, myGen, tok = std::move(token), icPtr]() {
+                [this, myGen, tok = std::move(token), icPtr, snapPtr]() {
                     if (myGen != _gen) return;
                     std::string current =
                         _ctx.hasSuggestion() ? *_ctx.suggestion() : "";
-                    _ctx.setSuggestion(current + tok);
-                    dbg("preedit updated: '%s'", _ctx.suggestion()->c_str());
-                    updatePreedit(icPtr);
+                    std::string accumulated = current + tok;
+                    _ctx.setSuggestion(accumulated);
+
+                    // Suppress preedit while accumulated suggestion is still an
+                    // echo of the typed context tail (min 4 chars, max 40 chars).
+                    constexpr size_t kEchoMin = 4;
+                    constexpr size_t kEchoMax = 40;
+                    bool isTailEcho = false;
+                    const std::string& snap = *snapPtr;
+                    if (!accumulated.empty() && !snap.empty()) {
+                        size_t checkLen = std::min({accumulated.size(),
+                                                   snap.size(), kEchoMax});
+                        if (checkLen >= kEchoMin) {
+                            isTailEcho =
+                                snap.compare(snap.size() - checkLen,
+                                             checkLen,
+                                             accumulated, 0, checkLen) == 0;
+                        }
+                    }
+                    if (!isTailEcho) {
+                        dbg("preedit updated: '%s'", accumulated.c_str());
+                        updatePreedit(icPtr);
+                    } else {
+                        dbg("on_token: tail-echo suppressed for '%s'",
+                            accumulated.c_str());
+                    }
                 });
         },
         [this, myGen, icRef, icPtr, startUs]() {
