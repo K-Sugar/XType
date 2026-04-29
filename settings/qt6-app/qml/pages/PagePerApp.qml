@@ -168,20 +168,47 @@ Item {
                             label: "Model"
                             isLast: true
                             width: parent.width
-                            XInput {
-                                placeholderText: "Default model"
-                                maximumLength: 64
+                            XComboBox {
+                                id: modelCombo
                                 width: 200
-                                text: {
-                                    if (root.selectedId === "") return ""
+
+                                model: {
+                                    const installed = Ollama.availableModels
+                                    const defaultLabel = "Default (" + Config.model + ")"
+                                    if (root.selectedId === "") return [defaultLabel]
                                     const entry = Config.apps[AppsKnown.canonicalForId(root.selectedId)]
-                                    return entry && entry.model ? entry.model : ""
+                                    const saved = entry && entry.model ? entry.model : ""
+                                    let list = [defaultLabel]
+                                    for (let i = 0; i < installed.length; ++i) list.push(installed[i])
+                                    if (saved && installed.indexOf(saved) < 0)
+                                        list.push(saved + "  (not installed)")
+                                    return list
                                 }
-                                onEditingFinished: {
+
+                                currentIndex: {
+                                    if (root.selectedId === "") return 0
+                                    const installed = Ollama.availableModels
+                                    const entry = Config.apps[AppsKnown.canonicalForId(root.selectedId)]
+                                    const saved = entry && entry.model ? entry.model : ""
+                                    if (!saved) return 0
+                                    const idx = installed.indexOf(saved)
+                                    if (idx >= 0) return idx + 1
+                                    return installed.length + 1  // "not installed" entry at end
+                                }
+
+                                onActivated: (i) => {
                                     if (root.selectedId === "") return
-                                    const v = text.trim()
-                                    Config.setApp(AppsKnown.canonicalForId(root.selectedId), "model", v === "" ? null : v)
+                                    const canonical = AppsKnown.canonicalForId(root.selectedId)
+                                    if (i === 0) {
+                                        Config.setApp(canonical, "model", null)
+                                    } else {
+                                        const installed = Ollama.availableModels
+                                        if (i <= installed.length)
+                                            Config.setApp(canonical, "model", installed[i - 1])
+                                        // i > installed.length → "(not installed)" entry, already saved — no action
+                                    }
                                 }
+
                                 ToolTip.text: "Ollama model name for this app.\nLeave empty to use the global default.\nSmaller: qwen2.5:1.5b (~80ms). Larger: gemma3:4b (~300ms, GPU recommended)."
                                 ToolTip.visible: hovered
                             }

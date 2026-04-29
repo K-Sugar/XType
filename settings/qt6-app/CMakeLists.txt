@@ -54,6 +54,7 @@ qt_add_qml_module(xtype-settings
         qml/primitives/XBars.qml
         qml/primitives/XButton.qml
         qml/primitives/XInput.qml
+        qml/primitives/XComboBox.qml
         qml/primitives/XCard.qml
         qml/primitives/XAppRow.qml
         qml/primitives/XAppIcon.qml
