@@ -228,6 +228,41 @@ TEST_CASE("max_corpus_mb and min_sentence_chars round-trip", "[config_store]") {
 }
 
 // ------------------------------------------------------------------ 8
+TEST_CASE("apps: per-app model round-trips via setApp and survives reload", "[config_store]") {
+    QTemporaryDir tmp; REQUIRE(tmp.isValid());
+    const QString dst = tmp.filePath("config.toml");
+
+    // Write model for kate via setApp().
+    {
+        ConfigStore cs(dst);
+        cs.load();
+        cs.setApp("kate", "model", QString("gemma3:4b"));
+        cs.saveNow();
+    }
+
+    // Reload: model must be present.
+    {
+        ConfigStore cs2(dst);
+        cs2.load();
+        const QVariantMap kate = cs2.apps()["kate"].toMap();
+        CHECK(kate["model"].toString() == "gemma3:4b");
+    }
+
+    // Clear model via null: key must be absent after reload.
+    {
+        ConfigStore cs3(dst);
+        cs3.load();
+        cs3.setApp("kate", "model", QVariant());  // null → remove
+        cs3.saveNow();
+    }
+
+    ConfigStore cs4(dst);
+    cs4.load();
+    const QVariantMap kate = cs4.apps()["kate"].toMap();
+    CHECK(!kate.contains("model"));
+}
+
+// ------------------------------------------------------------------ 9
 TEST_CASE("resetAll: backup file exists, main file reverts to defaults", "[config_store]") {
     QTemporaryDir tmp; REQUIRE(tmp.isValid());
     const QString dst = tmp.filePath("config.toml");

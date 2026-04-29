@@ -146,7 +146,7 @@ Item {
                         // Suggestion length (comingSoon)
                         XRow {
                             label: "Suggestion length"
-                            isLast: true
+                            isLast: false
                             width: parent.width
                             XSlider {
                                 min: 4; max: 48; step: 1
@@ -159,6 +159,28 @@ Item {
                                 onCommitted: (v) => {
                                     if (root.selectedId !== "")
                                         Config.setApp(AppsKnown.canonicalForId(root.selectedId), "num_predict", v)
+                                }
+                            }
+                        }
+
+                        // Model override
+                        XRow {
+                            label: "Model"
+                            isLast: true
+                            width: parent.width
+                            XInput {
+                                placeholderText: "Default model"
+                                maximumLength: 64
+                                width: 200
+                                text: {
+                                    if (root.selectedId === "") return ""
+                                    const entry = Config.apps[AppsKnown.canonicalForId(root.selectedId)]
+                                    return entry && entry.model ? entry.model : ""
+                                }
+                                onEditingFinished: {
+                                    if (root.selectedId === "") return
+                                    const v = text.trim()
+                                    Config.setApp(AppsKnown.canonicalForId(root.selectedId), "model", v === "" ? null : v)
                                 }
                             }
                         }
