@@ -11,6 +11,7 @@ catch_discover_tests(test_context_buffer)
 add_executable(test_corpus_collector test_corpus_collector.cpp)
 target_link_libraries(test_corpus_collector PRIVATE
     corpus_collector_obj
+    style_profile_obj
     path_utils_obj
     Catch2::Catch2WithMain
 )
