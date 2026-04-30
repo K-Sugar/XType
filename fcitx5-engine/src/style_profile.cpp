@@ -307,6 +307,19 @@ bool findStringArray(std::string_view json, std::string_view key, std::vector<st
 
 // ── public API ───────────────────────────────────────────────────────────────
 
+std::vector<std::string> StyleProfile::loadSeedExemplars(const std::string& path) {
+    std::vector<std::string> result;
+    std::ifstream in(path);
+    if (!in) return result;
+    std::stringstream ss;
+    ss << in.rdbuf();
+    std::string json = ss.str();
+    long long version = 0;
+    if (!findIntValue(json, "version", version) || version != 1) return result;
+    findStringArray(json, "exemplars", result);
+    return result;
+}
+
 void StyleProfile::loadFromCorpus(const std::string& corpus_path, unsigned seed) {
     _exemplars.clear();
     _openers.clear();
@@ -314,21 +327,32 @@ void StyleProfile::loadFromCorpus(const std::string& corpus_path, unsigned seed)
     _count      = 0;
     _lastUpdated = 0;
 
-    std::ifstream in(path_utils::expandTilde(corpus_path));
-    if (!in) return;
+    auto expandedPath = path_utils::expandTilde(corpus_path);
+
+    // Load rotation seed exemplars first — must run even if corpus.txt is absent
+    // (e.g., immediately after rotation renames corpus.txt to corpus.txt.1).
+    auto seedPath = expandedPath.parent_path() / "corpus_seed.json";
+    auto seedExemplars = loadSeedExemplars(seedPath.string());
+
+    std::ifstream in(expandedPath);
 
     std::vector<std::string> kept;
-    kept.reserve(256);
-    std::string line;
-    while (std::getline(in, line) && kept.size() < kMaxScannedSentences) {
-        appendSentencesFromLine(line, kept);
+    if (in) {
+        kept.reserve(256);
+        std::string line;
+        while (std::getline(in, line) && kept.size() < kMaxScannedSentences) {
+            appendSentencesFromLine(line, kept);
+        }
     }
-    if (kept.empty()) return;
 
-    long long sum = 0;
-    for (const auto& s : kept) sum += static_cast<long long>(s.size());
-    _avgChars = static_cast<int>(sum / static_cast<long long>(kept.size()));
-    _count    = static_cast<int>(kept.size());
+    if (kept.empty() && seedExemplars.empty()) return;
+
+    if (!kept.empty()) {
+        long long sum = 0;
+        for (const auto& s : kept) sum += static_cast<long long>(s.size());
+        _avgChars = static_cast<int>(sum / static_cast<long long>(kept.size()));
+        _count    = static_cast<int>(kept.size());
+    }
 
     // Sort by length, drop longest 5% and shortest 5%.
     std::vector<std::string> sorted = kept;
@@ -341,6 +365,10 @@ void StyleProfile::loadFromCorpus(const std::string& corpus_path, unsigned seed)
     } else {
         pool = std::move(sorted);
     }
+
+    // Prepend seed sentences to the candidate pool so they are eligible for sampling.
+    // They are real corpus sentences (already privacy-filtered) from before rotation.
+    pool.insert(pool.begin(), seedExemplars.begin(), seedExemplars.end());
 
     _exemplars   = pickExemplars(std::move(pool), seed);
     _openers     = computeCommonOpeners(kept);

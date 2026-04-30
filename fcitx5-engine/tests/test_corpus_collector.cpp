@@ -10,6 +10,7 @@
 #include <thread>
 
 #include "corpus_collector.h"
+#include "style_profile.h"
 
 namespace fs = std::filesystem;
 
@@ -519,4 +520,61 @@ TEST_CASE("code-shape rejects pipe operator", "[corpus][codeshape]") {
     REQUIRE(contents.find("func(x) | other(y)") == std::string::npos);
     REQUIRE(contents.find("The result was better than expected") != std::string::npos);
     fs::remove_all(p.parent_path());
+}
+
+// ── L5: rotation seed persistence ───────────────────────────────────────────
+
+TEST_CASE("rotation writes corpus_seed.json before rename", "[corpus][l5][rotation]") {
+    auto dir = fs::temp_directory_path() /
+               ("xtype_test_l5_" +
+                std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    fs::create_directories(dir);
+    auto corpusPath = dir / "corpus.txt";
+    auto seedPath   = dir / "corpus_seed.json";
+
+    // Pre-populate corpus with enough prose for a profile to be built.
+    {
+        std::ofstream out(corpusPath);
+        out << "The project team made significant progress on the feature this week.\n";
+        out << "She wrote a detailed summary of all the meeting notes and sent it out.\n";
+        out << "After the review we decided to proceed with the new implementation plan.\n";
+        out << "The documentation was updated to reflect the recent changes in the codebase.\n";
+        out << "Everyone agreed that the refactoring improved the overall code readability.\n";
+    }
+
+    // max_corpus_mb=0 → cap=0 → any non-empty file triggers rotation on first flush.
+    LearningConfig cfg;
+    cfg.enabled            = true;
+    cfg.corpus_path        = corpusPath.string();
+    cfg.flush_interval_sec = 1;
+    cfg.max_corpus_mb      = 0;
+    cfg.min_sentence_chars = 12;
+
+    {
+        CorpusCollector c(cfg);
+        c.record("The new architecture made everything much simpler to maintain");
+        std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+    }
+
+    // corpus_seed.json must exist and contain a non-empty exemplars array.
+    REQUIRE(fs::exists(seedPath));
+
+    std::string json = readAll(seedPath);
+    REQUIRE(json.find("\"version\"")   != std::string::npos);
+    REQUIRE(json.find("\"exemplars\"") != std::string::npos);
+    auto arrOpen  = json.find('[', json.find("\"exemplars\""));
+    auto arrClose = json.find(']', arrOpen);
+    REQUIRE(arrOpen  != std::string::npos);
+    REQUIRE(arrClose != std::string::npos);
+    // Array must contain at least one quoted string.
+    auto firstQuote = json.find('"', arrOpen + 1);
+    REQUIRE(firstQuote != std::string::npos);
+    REQUIRE(firstQuote < arrClose);
+
+    // loadFromCorpus on the new (post-rotation) corpus bootstraps from the seed.
+    StyleProfile sp;
+    sp.loadFromCorpus(corpusPath.string(), 42);
+    REQUIRE_FALSE(sp.exemplars().empty());
+
+    fs::remove_all(dir);
 }

@@ -54,6 +54,8 @@ public:
     int                             sentenceCount()  const { return _count; }
 
 private:
+    static std::vector<std::string> loadSeedExemplars(const std::string& path);
+
     std::vector<std::string> _exemplars;
     int                      _avgChars{0};
     std::vector<std::string> _openers;
