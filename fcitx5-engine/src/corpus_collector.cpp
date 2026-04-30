@@ -26,18 +26,6 @@ std::string toLower(std::string_view s) {
     return out;
 }
 
-bool hasCodeShape(const std::string& s) {
-    int run = 0;
-    for (char c : s) {
-        if (c == '{' || c == '}' || c == ';' || c == '=') {
-            if (++run >= 2) return true;
-        } else {
-            run = 0;
-        }
-    }
-    return false;
-}
-
 bool hasAlpha(const std::string& s) {
     for (unsigned char c : s)
         if (std::isalpha(c)) return true;
@@ -48,6 +36,139 @@ std::string trim(std::string s) {
     while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front()))) s.erase(0, 1);
     while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back())))  s.pop_back();
     return s;
+}
+
+// Returns true if the string starts with prefix after trimming leading whitespace.
+bool startsWithTrimmed(const std::string& s, std::string_view prefix) {
+    size_t i = 0;
+    while (i < s.size() && std::isspace(static_cast<unsigned char>(s[i]))) ++i;
+    if (s.size() - i < prefix.size()) return false;
+    return s.compare(i, prefix.size(), prefix) == 0;
+}
+
+// Check a single physical line for code-shape patterns.
+// Returns true if the line looks like code.
+bool lineHasCodeShape(const std::string& line) {
+    // ── C/C++/Java brace / assignment runs ───────────────────────────────────
+    {
+        int run = 0;
+        for (char c : line) {
+            if (c == '{' || c == '}' || c == ';' || c == '=') {
+                if (++run >= 2) return true;
+            } else {
+                run = 0;
+            }
+        }
+    }
+
+    // ── Shell / terminal ──────────────────────────────────────────────────────
+    if (line.find("$(") != std::string::npos) return true;
+    if (line.find('`') != std::string::npos)  return true;
+    if (line.find(" | ") != std::string::npos) return true;
+    if (line.find("&&") != std::string::npos) return true;
+    if (line.find("||") != std::string::npos) return true;
+    if (startsWithTrimmed(line, "$ "))  return true;
+    if (startsWithTrimmed(line, "# "))  return true;
+
+    // ── Python / indented blocks ──────────────────────────────────────────────
+    // Indented with 4 spaces or a tab followed by non-space
+    if (line.size() >= 5 && line[0] == ' ' && line[1] == ' ' &&
+        line[2] == ' ' && line[3] == ' ' && !std::isspace(static_cast<unsigned char>(line[4])))
+        return true;
+    if (!line.empty() && line[0] == '\t' && line.size() >= 2 &&
+        !std::isspace(static_cast<unsigned char>(line[1])))
+        return true;
+
+    // def func(
+    {
+        auto pos = line.find("def ");
+        if (pos != std::string::npos && line.find('(', pos) != std::string::npos)
+            return true;
+    }
+
+    // from X import / import X
+    if (line.find("from ") != std::string::npos && line.find(" import") != std::string::npos)
+        return true;
+    if (startsWithTrimmed(line, "import ")) return true;
+
+    // Colon-terminated line (function/if/for/class definition)
+    {
+        std::string t = trim(line);
+        if (t.size() >= 2 && t.back() == ':' && t[t.size()-2] != ':')
+            return true;
+    }
+
+    // ── YAML / config ─────────────────────────────────────────────────────────
+    if (line.find("---") != std::string::npos) return true;
+    if (line.find("...") != std::string::npos) return true;
+    // Key-value: starts with ^[a-z_]{3,}: (after optional whitespace)
+    {
+        size_t i = 0;
+        while (i < line.size() && std::isspace(static_cast<unsigned char>(line[i]))) ++i;
+        size_t key_start = i;
+        while (i < line.size() && (std::islower(static_cast<unsigned char>(line[i])) ||
+                                   line[i] == '_')) ++i;
+        size_t key_len = i - key_start;
+        if (key_len >= 3 && i + 1 < line.size() && line[i] == ':' && line[i+1] == ' ')
+            return true;
+    }
+
+    // ── SQL (uppercase keywords — case-sensitive to avoid prose false positives) ─
+    // Real SQL code uses uppercase keywords; prose uses lowercase "select", "from", etc.
+    {
+        constexpr std::array<std::string_view, 9> kSQL = {
+            "SELECT ", "FROM ", "WHERE ", "INSERT INTO", "UPDATE ",
+            "DELETE FROM", "CREATE TABLE", "DROP TABLE", "ALTER TABLE"
+        };
+        for (auto kw : kSQL) {
+            if (line.find(kw) != std::string::npos) return true;
+        }
+    }
+
+    // ── Markdown / markup ─────────────────────────────────────────────────────
+    if (startsWithTrimmed(line, "##"))  return true;
+    if (startsWithTrimmed(line, " - ")) return true;
+    if (startsWithTrimmed(line, "* "))  return true;
+    if (line.find("**") != std::string::npos) return true;
+    if (line.find("__") != std::string::npos) return true;
+    // 3+ backticks (code fence)
+    {
+        int bt = 0;
+        for (char c : line) {
+            if (c == '`') { if (++bt >= 3) return true; }
+            else bt = 0;
+        }
+    }
+
+    return false;
+}
+
+bool hasCodeShape(const std::string& s) {
+    // Apply alpha-ratio check to the whole string (≥ 20 chars).
+    if (s.size() >= 20) {
+        int alpha = 0, nonws = 0;
+        for (unsigned char c : s) {
+            if (!std::isspace(c)) {
+                ++nonws;
+                if (std::isalpha(c)) ++alpha;
+            }
+        }
+        if (nonws > 0 && static_cast<double>(alpha) / nonws < 0.55) return true;
+    }
+
+    // Check per physical line (handles embedded newlines).
+    std::string line;
+    for (char c : s) {
+        if (c == '\n') {
+            if (lineHasCodeShape(line)) return true;
+            line.clear();
+        } else {
+            line.push_back(c);
+        }
+    }
+    if (!line.empty() && lineHasCodeShape(line)) return true;
+
+    return false;
 }
 
 }  // namespace
@@ -156,6 +277,140 @@ void CorpusCollector::pruneOldEntries(const std::filesystem::path& corpus_path, 
     write_atomic(tp, kept_times, [](std::time_t t) { return std::to_string(t); });
 }
 
+// ── privacy filter ───────────────────────────────────────────────────────────
+
+// Returns true (reject) if the text contains any privacy-sensitive content.
+// This is the PRIMARY enforcement gate — every sentence is checked here before
+// any disk write. StyleProfile runs its own filters as a second line of defense.
+bool CorpusCollector::hasPrivateTerm(const std::string& s) {
+    // ── Keyword list (case-insensitive substring) ─────────────────────────────
+    {
+        static const std::array<std::string_view, 18> kKeywords = {
+            "password", "secret", "token", "auth", "credentials", "passphrase",
+            "private key", "wallet", "seed phrase", "ssn", "dob", "cvv",
+            "api key", "access key", "bearer", "private_key", "secret_key",
+            "credit card"
+        };
+        std::string lower = toLower(s);
+        for (auto kw : kKeywords) {
+            if (lower.find(kw) != std::string::npos) return true;
+        }
+    }
+
+    // ── URL patterns ─────────────────────────────────────────────────────────
+    if (s.find("https://") != std::string::npos) return true;
+    if (s.find("http://")  != std::string::npos) return true;
+    if (s.find("www.")     != std::string::npos) return true;
+    // Bare domain: [a-z0-9-]+\.[a-z]{2,} flanked by non-alpha (e.g. "github.com")
+    {
+        for (size_t i = 0; i < s.size(); ) {
+            // Find a dot that is not at position 0 or end
+            size_t dot = s.find('.', i);
+            if (dot == std::string::npos || dot == 0 || dot + 1 >= s.size()) break;
+
+            // Check character before dot: must be alnum or '-' (part of a domain)
+            char before = s[dot - 1];
+            if (!std::isalnum(static_cast<unsigned char>(before)) && before != '-') {
+                i = dot + 1;
+                continue;
+            }
+
+            // Scan TLD: letters only, 2+ chars
+            size_t tld_start = dot + 1;
+            size_t tld_end   = tld_start;
+            while (tld_end < s.size() &&
+                   std::isalpha(static_cast<unsigned char>(s[tld_end]))) ++tld_end;
+            size_t tld_len = tld_end - tld_start;
+            if (tld_len < 2) { i = dot + 1; continue; }
+
+            // The character after the TLD (if any) must be non-alpha (word boundary)
+            if (tld_end < s.size() &&
+                std::isalpha(static_cast<unsigned char>(s[tld_end]))) {
+                i = dot + 1;
+                continue;
+            }
+
+            // Scan left for domain label chars
+            size_t lhs_end = dot;
+            while (lhs_end > 0 &&
+                   (std::isalnum(static_cast<unsigned char>(s[lhs_end - 1])) ||
+                    s[lhs_end - 1] == '-')) --lhs_end;
+            size_t label_len = dot - lhs_end;
+            if (label_len < 1) { i = dot + 1; continue; }
+
+            // Character before the label (if any) must be non-alpha (word boundary)
+            if (lhs_end > 0 &&
+                std::isalpha(static_cast<unsigned char>(s[lhs_end - 1]))) {
+                i = dot + 1;
+                continue;
+            }
+
+            return true;  // Found a bare domain pattern
+        }
+    }
+
+    // ── Email pattern ────────────────────────────────────────────────────────
+    // Port from StyleProfile::containsEmailLike()
+    {
+        auto at = s.find('@');
+        if (at != std::string::npos && at > 0 && at + 1 < s.size()) {
+            auto isWs = [](char c) { return std::isspace(static_cast<unsigned char>(c)); };
+            if (!isWs(s[at - 1]) && !isWs(s[at + 1])) {
+                auto dot = s.find('.', at + 1);
+                if (dot != std::string::npos && dot + 1 < s.size() &&
+                    !isWs(s[dot - 1]) && !isWs(s[dot + 1])) {
+                    return true;
+                }
+            }
+        }
+    }
+
+    // ── Phone patterns ───────────────────────────────────────────────────────
+    // 7+ consecutive digits (covers international)
+    {
+        int run = 0;
+        for (unsigned char c : s) {
+            if (std::isdigit(c)) { if (++run >= 7) return true; }
+            else                 { run = 0; }
+        }
+    }
+    // Formatted patterns: NNN-NNN-NNNN  NNN NNN NNNN  +N NNN NNN NNNN
+    {
+        auto isPhone = [&]() -> bool {
+            // Simple scan for digit-separator patterns
+            for (size_t i = 0; i + 11 < s.size(); ++i) {
+                // NNN-NNN-NNNN
+                if (std::isdigit(static_cast<unsigned char>(s[i])) &&
+                    std::isdigit(static_cast<unsigned char>(s[i+1])) &&
+                    std::isdigit(static_cast<unsigned char>(s[i+2])) &&
+                    (s[i+3] == '-' || s[i+3] == ' ') &&
+                    std::isdigit(static_cast<unsigned char>(s[i+4])) &&
+                    std::isdigit(static_cast<unsigned char>(s[i+5])) &&
+                    std::isdigit(static_cast<unsigned char>(s[i+6])) &&
+                    (s[i+7] == '-' || s[i+7] == ' ') &&
+                    std::isdigit(static_cast<unsigned char>(s[i+8])) &&
+                    std::isdigit(static_cast<unsigned char>(s[i+9])) &&
+                    std::isdigit(static_cast<unsigned char>(s[i+10])) &&
+                    std::isdigit(static_cast<unsigned char>(s[i+11])))
+                    return true;
+            }
+            return false;
+        };
+        if (isPhone()) return true;
+    }
+
+    // ── Short digit run (4+ consecutive digits — PINs, account numbers) ──────
+    {
+        int run = 0;
+        for (unsigned char c : s) {
+            if (std::isdigit(c)) { if (++run >= 4) return true; }
+            else                 { run = 0; }
+        }
+    }
+
+    return false;
+}
+
 // ── internals ────────────────────────────────────────────────────────────────
 
 bool CorpusCollector::acceptable(const std::string& text) const {
@@ -163,6 +418,7 @@ bool CorpusCollector::acceptable(const std::string& text) const {
     if (static_cast<int>(text.size()) < _cfg.min_sentence_chars) return false;
     if (!hasAlpha(text)) return false;
     if (hasCodeShape(text)) return false;
+    if (hasPrivateTerm(text)) return false;
     return true;
 }
 

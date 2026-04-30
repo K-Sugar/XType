@@ -239,3 +239,262 @@ TEST_CASE("parent directory is created if missing", "[corpus][fs]") {
     REQUIRE(fs::exists(deep));
     fs::remove_all(base);
 }
+
+// ── L0: privacy filter tests (§1.4) ─────────────────────────────────────────
+// All sensitive strings must be blocked (not appear in corpus.txt).
+// All clean prose must be accepted.
+
+// Helper: config with short min_sentence_chars for short test strings.
+static LearningConfig makeShortCfg(const fs::path& p) {
+    LearningConfig c = makeCfg(p);
+    c.min_sentence_chars = 5;
+    return c;
+}
+
+TEST_CASE("privacy filter rejects email addresses", "[corpus][privacy]") {
+    auto p = makeTempCorpusPath("priv_email");
+    {
+        CorpusCollector c(makeShortCfg(p));
+        c.record("My email is user@example.com please reply");
+        c.record("The project deadline is next Thursday");
+        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+    }
+    auto contents = readAll(p);
+    REQUIRE(contents.find("user@example.com") == std::string::npos);
+    REQUIRE(contents.find("The project deadline is next Thursday") != std::string::npos);
+    fs::remove_all(p.parent_path());
+}
+
+TEST_CASE("privacy filter rejects https URLs", "[corpus][privacy]") {
+    auto p = makeTempCorpusPath("priv_https");
+    {
+        CorpusCollector c(makeShortCfg(p));
+        c.record("The URL is https://github.com/foo");
+        c.record("Please review the attached document");
+        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+    }
+    auto contents = readAll(p);
+    REQUIRE(contents.find("https://") == std::string::npos);
+    REQUIRE(contents.find("Please review the attached document") != std::string::npos);
+    fs::remove_all(p.parent_path());
+}
+
+TEST_CASE("privacy filter rejects www URLs", "[corpus][privacy]") {
+    auto p = makeTempCorpusPath("priv_www");
+    {
+        CorpusCollector c(makeShortCfg(p));
+        c.record("Visit www.google.com for more info");
+        c.record("Meeting notes from the quarterly review");
+        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+    }
+    auto contents = readAll(p);
+    REQUIRE(contents.find("www.google.com") == std::string::npos);
+    REQUIRE(contents.find("Meeting notes from the quarterly review") != std::string::npos);
+    fs::remove_all(p.parent_path());
+}
+
+TEST_CASE("privacy filter rejects phone numbers", "[corpus][privacy]") {
+    auto p = makeTempCorpusPath("priv_phone");
+    {
+        CorpusCollector c(makeShortCfg(p));
+        c.record("Call me at 555-867-5309 anytime");
+        c.record("I think the new feature looks great");
+        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+    }
+    auto contents = readAll(p);
+    REQUIRE(contents.find("555-867-5309") == std::string::npos);
+    REQUIRE(contents.find("I think the new feature looks great") != std::string::npos);
+    fs::remove_all(p.parent_path());
+}
+
+TEST_CASE("privacy filter rejects 4-digit PIN", "[corpus][privacy]") {
+    auto p = makeTempCorpusPath("priv_pin");
+    {
+        CorpusCollector c(makeShortCfg(p));
+        c.record("My PIN is 1234 keep it safe");
+        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+    }
+    auto contents = readAll(p);
+    REQUIRE(contents.find("My PIN is 1234") == std::string::npos);
+    fs::remove_all(p.parent_path());
+}
+
+TEST_CASE("privacy filter rejects password keyword", "[corpus][privacy]") {
+    auto p = makeTempCorpusPath("priv_password");
+    {
+        CorpusCollector c(makeShortCfg(p));
+        c.record("Enter your password to continue");
+        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+    }
+    auto contents = readAll(p);
+    REQUIRE(contents.find("password") == std::string::npos);
+    fs::remove_all(p.parent_path());
+}
+
+TEST_CASE("privacy filter rejects passphrase keyword", "[corpus][privacy]") {
+    auto p = makeTempCorpusPath("priv_passphrase");
+    {
+        CorpusCollector c(makeShortCfg(p));
+        c.record("passphrase: correct horse battery");
+        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+    }
+    auto contents = readAll(p);
+    REQUIRE(contents.find("passphrase") == std::string::npos);
+    fs::remove_all(p.parent_path());
+}
+
+TEST_CASE("privacy filter rejects wallet keyword", "[corpus][privacy]") {
+    auto p = makeTempCorpusPath("priv_wallet");
+    {
+        CorpusCollector c(makeShortCfg(p));
+        c.record("wallet address 0x1a2b3c");
+        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+    }
+    auto contents = readAll(p);
+    REQUIRE(contents.find("wallet") == std::string::npos);
+    fs::remove_all(p.parent_path());
+}
+
+TEST_CASE("privacy filter rejects SSN pattern", "[corpus][privacy]") {
+    auto p = makeTempCorpusPath("priv_ssn");
+    {
+        CorpusCollector c(makeShortCfg(p));
+        c.record("my ssn is 123-45-6789");
+        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+    }
+    auto contents = readAll(p);
+    REQUIRE(contents.find("ssn") == std::string::npos);
+    fs::remove_all(p.parent_path());
+}
+
+TEST_CASE("privacy filter rejects CVV keyword", "[corpus][privacy]") {
+    auto p = makeTempCorpusPath("priv_cvv");
+    {
+        CorpusCollector c(makeShortCfg(p));
+        c.record("cvv 123 expiry 01/26");
+        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+    }
+    auto contents = readAll(p);
+    REQUIRE(contents.find("cvv") == std::string::npos);
+    fs::remove_all(p.parent_path());
+}
+
+TEST_CASE("privacy filter rejects bearer token prefix", "[corpus][privacy]") {
+    auto p = makeTempCorpusPath("priv_bearer");
+    {
+        CorpusCollector c(makeShortCfg(p));
+        c.record("bearer eyJhbGc...");
+        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+    }
+    auto contents = readAll(p);
+    REQUIRE(contents.find("bearer") == std::string::npos);
+    fs::remove_all(p.parent_path());
+}
+
+// ── L0: code-shape extended patterns (§2.3) ──────────────────────────────────
+
+TEST_CASE("code-shape rejects Python range loop", "[corpus][codeshape]") {
+    auto p = makeTempCorpusPath("code_python");
+    {
+        CorpusCollector c(makeShortCfg(p));
+        c.record("for i in range(10):");
+        c.record("The installation went smoothly");
+        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+    }
+    auto contents = readAll(p);
+    REQUIRE(contents.find("for i in range") == std::string::npos);
+    REQUIRE(contents.find("The installation went smoothly") != std::string::npos);
+    fs::remove_all(p.parent_path());
+}
+
+TEST_CASE("code-shape rejects SQL SELECT", "[corpus][codeshape]") {
+    auto p = makeTempCorpusPath("code_sql");
+    {
+        CorpusCollector c(makeShortCfg(p));
+        c.record("SELECT name FROM users WHERE id = 1");
+        c.record("Please select the correct option from the list");
+        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+    }
+    auto contents = readAll(p);
+    REQUIRE(contents.find("SELECT name FROM") == std::string::npos);
+    REQUIRE(contents.find("Please select the correct option from the list") != std::string::npos);
+    fs::remove_all(p.parent_path());
+}
+
+TEST_CASE("code-shape rejects YAML config block", "[corpus][codeshape]") {
+    auto p = makeTempCorpusPath("code_yaml");
+    {
+        CorpusCollector c(makeShortCfg(p));
+        // Two physical lines with embedded newline
+        c.record("config:\n  host: localhost");
+        c.record("We need to update our configuration soon");
+        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+    }
+    auto contents = readAll(p);
+    REQUIRE(contents.find("host: localhost") == std::string::npos);
+    REQUIRE(contents.find("We need to update our configuration soon") != std::string::npos);
+    fs::remove_all(p.parent_path());
+}
+
+TEST_CASE("code-shape rejects shell boolean operator", "[corpus][codeshape]") {
+    auto p = makeTempCorpusPath("code_shell");
+    {
+        CorpusCollector c(makeShortCfg(p));
+        c.record("git commit -m \"fix\" && git push");
+        c.record("The result was better than expected");
+        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+    }
+    auto contents = readAll(p);
+    REQUIRE(contents.find("&&") == std::string::npos);
+    REQUIRE(contents.find("The result was better than expected") != std::string::npos);
+    fs::remove_all(p.parent_path());
+}
+
+TEST_CASE("code-shape rejects Markdown heading", "[corpus][codeshape]") {
+    auto p = makeTempCorpusPath("code_markdown");
+    {
+        CorpusCollector c(makeShortCfg(p));
+        c.record("## Installation");
+        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+    }
+    auto contents = readAll(p);
+    REQUIRE(contents.find("## Installation") == std::string::npos);
+    fs::remove_all(p.parent_path());
+}
+
+TEST_CASE("code-shape rejects Python import statement", "[corpus][codeshape]") {
+    auto p = makeTempCorpusPath("code_import");
+    {
+        CorpusCollector c(makeShortCfg(p));
+        c.record("import os; os.path.join(a, b)");
+        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+    }
+    auto contents = readAll(p);
+    REQUIRE(contents.find("import os") == std::string::npos);
+    fs::remove_all(p.parent_path());
+}
+
+TEST_CASE("code-shape rejects YAML key-value line", "[corpus][codeshape]") {
+    auto p = makeTempCorpusPath("code_yamlkv");
+    {
+        // min_sentence_chars = 5 so "foo: bar" (8 chars) passes length check
+        CorpusCollector c(makeShortCfg(p));
+        c.record("foo: bar");
+        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+    }
+    auto contents = readAll(p);
+    REQUIRE(contents.find("foo: bar") == std::string::npos);
+    fs::remove_all(p.parent_path());
+}
+
+TEST_CASE("code-shape rejects pipe operator", "[corpus][codeshape]") {
+    auto p = makeTempCorpusPath("code_pipe");
+    {
+        CorpusCollector c(makeShortCfg(p));
+        c.record("result = func(x) | other(y)");
+        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+    }
+    auto contents = readAll(p);
+    REQUIRE(contents.find("func(x) | other(y)") == std::string::npos);
+    fs::remove_all(p.parent_path());
+}

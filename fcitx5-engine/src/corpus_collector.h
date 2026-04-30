@@ -51,6 +51,11 @@ private:
     void rotateIfNeeded();
     bool acceptable(const std::string& text) const;
 
+    // Returns true (reject) if the text contains privacy-sensitive patterns:
+    // keywords (password, token, …), email addresses, URLs, phone numbers,
+    // or runs of ≥ 4 consecutive digits (PINs, credit-card fragments).
+    static bool hasPrivateTerm(const std::string& s);
+
     LearningConfig          _cfg;
     std::filesystem::path   _path;
     bool                    _disabled{false};
