@@ -333,11 +333,18 @@ void StyleProfile::loadFromCorpus(const std::string& corpus_path, unsigned seed)
     _count      = 0;
     _lastUpdated = 0;
 
+    auto expandedPath = path_utils::expandTilde(corpus_path);
+
+    // Load rotation seed exemplars first — works even when corpus.txt is absent
+    // immediately after rotation (corpus.txt renamed to corpus.txt.1).
+    // Seeds are real corpus sentences already through acceptable() filters.
+    auto seedPath = expandedPath.parent_path() / "corpus_seed.json";
+    auto seedExemplars = loadSeedExemplars(seedPath.string());
+
     std::vector<std::string> kept;
     kept.reserve(256);
     {
-        std::ifstream in(path_utils::expandTilde(corpus_path),
-                         std::ios::binary | std::ios::ate);
+        std::ifstream in(expandedPath, std::ios::binary | std::ios::ate);
         if (in) {
             const std::streamsize fileSize = static_cast<std::streamsize>(in.tellg());
             const std::streamsize seekPos =
@@ -356,19 +363,16 @@ void StyleProfile::loadFromCorpus(const std::string& corpus_path, unsigned seed)
         }
     }
 
-    // Load rotation seed exemplars and prepend to candidate pool so the
-    // profiler can bootstrap immediately after a rotation even from an empty corpus.
-    // They are real corpus sentences (already privacy-filtered) from before rotation.
-    auto seedPath = std::filesystem::path(corpus_path).parent_path() / "corpus_seed.json";
-    auto seedExemplars = loadSeedExemplars(seedPath.string());
     kept.insert(kept.begin(), seedExemplars.begin(), seedExemplars.end());
 
-    if (kept.empty()) return;
+    if (kept.empty() && seedExemplars.empty()) return;
 
-    long long sum = 0;
-    for (const auto& s : kept) sum += static_cast<long long>(s.size());
-    _avgChars = static_cast<int>(sum / static_cast<long long>(kept.size()));
-    _count    = static_cast<int>(kept.size());
+    if (!kept.empty()) {
+        long long sum = 0;
+        for (const auto& s : kept) sum += static_cast<long long>(s.size());
+        _avgChars = static_cast<int>(sum / static_cast<long long>(kept.size()));
+        _count    = static_cast<int>(kept.size());
+    }
 
     // Sort by length, drop longest 5% and shortest 5%.
     std::vector<std::string> sorted = kept;
@@ -381,6 +385,10 @@ void StyleProfile::loadFromCorpus(const std::string& corpus_path, unsigned seed)
     } else {
         pool = std::move(sorted);
     }
+
+    // Prepend seed sentences to the candidate pool so they are eligible for sampling.
+    // They are real corpus sentences (already privacy-filtered) from before rotation.
+    pool.insert(pool.begin(), seedExemplars.begin(), seedExemplars.end());
 
     _exemplars   = pickExemplars(std::move(pool), seed);
     _openers     = computeCommonOpeners(kept);

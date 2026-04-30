@@ -49,6 +49,7 @@ private:
     void run();
     void flushLocked(std::deque<std::string>& drained);
     void rotateIfNeeded();
+    void extractAndSeedExemplars();
     bool acceptable(const std::string& text) const;
 
     // Returns true (reject) if the text contains privacy-sensitive patterns:

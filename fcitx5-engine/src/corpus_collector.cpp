@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "path_utils.h"
+#include "style_profile.h"
 
 namespace {
 
@@ -169,6 +170,29 @@ bool hasCodeShape(const std::string& s) {
     if (!line.empty() && lineHasCodeShape(line)) return true;
 
     return false;
+}
+
+std::string jsonEscape(std::string_view s) {
+    std::string out;
+    out.reserve(s.size());
+    for (char c : s) {
+        switch (c) {
+            case '"':  out += "\\\""; break;
+            case '\\': out += "\\\\"; break;
+            case '\n': out += "\\n";  break;
+            case '\r': out += "\\r";  break;
+            case '\t': out += "\\t";  break;
+            default:
+                if (static_cast<unsigned char>(c) < 0x20) {
+                    char buf[8];
+                    std::snprintf(buf, sizeof(buf), "\\u%04x", c);
+                    out += buf;
+                } else {
+                    out += c;
+                }
+        }
+    }
+    return out;
 }
 
 }  // namespace
@@ -477,6 +501,9 @@ void CorpusCollector::rotateIfNeeded() {
     const auto cap = static_cast<std::uintmax_t>(_cfg.max_corpus_mb) * 1024ull * 1024ull;
     if (sz <= cap) return;
 
+    // Persist current exemplars before history is rotated away.
+    extractAndSeedExemplars();
+
     auto rotated = _path;
     rotated += ".1";
     std::filesystem::rename(_path, rotated, ec);
@@ -484,5 +511,39 @@ void CorpusCollector::rotateIfNeeded() {
     if (!ec && _log) {
         _log("rotate: " + _path.filename().string() + " -> " +
              rotated.filename().string() + " (was " + std::to_string(sz) + " bytes)");
+    }
+}
+
+void CorpusCollector::extractAndSeedExemplars() {
+    if (_path.empty()) return;
+
+    StyleProfile tmp;
+    tmp.loadFromCorpus(_path.string());
+
+    // exemplars() are sourced from corpus.txt, which has already passed
+    // acceptable() filters at record time — no re-filtering needed here.
+    const auto& exemplars = tmp.exemplars();
+    if (exemplars.empty()) return;
+
+    std::string json = "{\n";
+    json += "  \"version\": 1,\n";
+    json += "  \"saved_at\": " + std::to_string(std::time(nullptr)) + ",\n";
+    json += "  \"exemplars\": [\n";
+    for (size_t i = 0; i < exemplars.size(); ++i) {
+        json += "    \"" + jsonEscape(exemplars[i]) + "\"";
+        if (i + 1 < exemplars.size()) json += ",";
+        json += "\n";
+    }
+    json += "  ]\n}\n";
+
+    auto seedPath = _path.parent_path() / "corpus_seed.json";
+    auto tmpPath  = seedPath;
+    tmpPath += ".tmp";
+
+    if (FILE* f = std::fopen(tmpPath.c_str(), "w")) {
+        std::fputs(json.c_str(), f);
+        std::fclose(f);
+        std::error_code ec;
+        std::filesystem::rename(tmpPath, seedPath, ec);
     }
 }
