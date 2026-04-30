@@ -455,10 +455,12 @@ TEST_CASE("code-shape rejects Markdown heading", "[corpus][codeshape]") {
     {
         CorpusCollector c(makeShortCfg(p));
         c.record("## Installation");
+        c.record("The installation went smoothly");
         std::this_thread::sleep_for(std::chrono::milliseconds(1500));
     }
     auto contents = readAll(p);
     REQUIRE(contents.find("## Installation") == std::string::npos);
+    REQUIRE(contents.find("The installation went smoothly") != std::string::npos);
     fs::remove_all(p.parent_path());
 }
 
@@ -467,10 +469,12 @@ TEST_CASE("code-shape rejects Python import statement", "[corpus][codeshape]") {
     {
         CorpusCollector c(makeShortCfg(p));
         c.record("import os; os.path.join(a, b)");
+        c.record("The project deadline is next Thursday");
         std::this_thread::sleep_for(std::chrono::milliseconds(1500));
     }
     auto contents = readAll(p);
     REQUIRE(contents.find("import os") == std::string::npos);
+    REQUIRE(contents.find("The project deadline is next Thursday") != std::string::npos);
     fs::remove_all(p.parent_path());
 }
 
@@ -480,10 +484,12 @@ TEST_CASE("code-shape rejects YAML key-value line", "[corpus][codeshape]") {
         // min_sentence_chars = 5 so "foo: bar" (8 chars) passes length check
         CorpusCollector c(makeShortCfg(p));
         c.record("foo: bar");
+        c.record("Please review the attached document");
         std::this_thread::sleep_for(std::chrono::milliseconds(1500));
     }
     auto contents = readAll(p);
     REQUIRE(contents.find("foo: bar") == std::string::npos);
+    REQUIRE(contents.find("Please review the attached document") != std::string::npos);
     fs::remove_all(p.parent_path());
 }
 
@@ -492,9 +498,11 @@ TEST_CASE("code-shape rejects pipe operator", "[corpus][codeshape]") {
     {
         CorpusCollector c(makeShortCfg(p));
         c.record("result = func(x) | other(y)");
+        c.record("The result was better than expected");
         std::this_thread::sleep_for(std::chrono::milliseconds(1500));
     }
     auto contents = readAll(p);
     REQUIRE(contents.find("func(x) | other(y)") == std::string::npos);
+    REQUIRE(contents.find("The result was better than expected") != std::string::npos);
     fs::remove_all(p.parent_path());
 }

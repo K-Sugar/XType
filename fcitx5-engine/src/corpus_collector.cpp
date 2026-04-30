@@ -127,7 +127,7 @@ bool lineHasCodeShape(const std::string& line) {
 
     // ── Markdown / markup ─────────────────────────────────────────────────────
     if (startsWithTrimmed(line, "##"))  return true;
-    if (startsWithTrimmed(line, " - ")) return true;
+    if (startsWithTrimmed(line, "- "))  return true;
     if (startsWithTrimmed(line, "* "))  return true;
     if (line.find("**") != std::string::npos) return true;
     if (line.find("__") != std::string::npos) return true;
