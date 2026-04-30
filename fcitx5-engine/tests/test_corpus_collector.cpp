@@ -312,10 +312,12 @@ TEST_CASE("privacy filter rejects 4-digit PIN", "[corpus][privacy]") {
     {
         CorpusCollector c(makeShortCfg(p));
         c.record("My PIN is 1234 keep it safe");
+        c.record("Meeting notes from the quarterly review");
         std::this_thread::sleep_for(std::chrono::milliseconds(1500));
     }
     auto contents = readAll(p);
     REQUIRE(contents.find("My PIN is 1234") == std::string::npos);
+    REQUIRE(contents.find("Meeting notes from the quarterly review") != std::string::npos);
     fs::remove_all(p.parent_path());
 }
 
@@ -324,10 +326,12 @@ TEST_CASE("privacy filter rejects password keyword", "[corpus][privacy]") {
     {
         CorpusCollector c(makeShortCfg(p));
         c.record("Enter your password to continue");
+        c.record("The project deadline is next Thursday");
         std::this_thread::sleep_for(std::chrono::milliseconds(1500));
     }
     auto contents = readAll(p);
     REQUIRE(contents.find("password") == std::string::npos);
+    REQUIRE(contents.find("The project deadline is next Thursday") != std::string::npos);
     fs::remove_all(p.parent_path());
 }
 
@@ -336,10 +340,12 @@ TEST_CASE("privacy filter rejects passphrase keyword", "[corpus][privacy]") {
     {
         CorpusCollector c(makeShortCfg(p));
         c.record("passphrase: correct horse battery");
+        c.record("I think the new feature looks great");
         std::this_thread::sleep_for(std::chrono::milliseconds(1500));
     }
     auto contents = readAll(p);
     REQUIRE(contents.find("passphrase") == std::string::npos);
+    REQUIRE(contents.find("I think the new feature looks great") != std::string::npos);
     fs::remove_all(p.parent_path());
 }
 
@@ -348,10 +354,12 @@ TEST_CASE("privacy filter rejects wallet keyword", "[corpus][privacy]") {
     {
         CorpusCollector c(makeShortCfg(p));
         c.record("wallet address 0x1a2b3c");
+        c.record("Please review the attached document");
         std::this_thread::sleep_for(std::chrono::milliseconds(1500));
     }
     auto contents = readAll(p);
     REQUIRE(contents.find("wallet") == std::string::npos);
+    REQUIRE(contents.find("Please review the attached document") != std::string::npos);
     fs::remove_all(p.parent_path());
 }
 
@@ -360,10 +368,12 @@ TEST_CASE("privacy filter rejects SSN pattern", "[corpus][privacy]") {
     {
         CorpusCollector c(makeShortCfg(p));
         c.record("my ssn is 123-45-6789");
+        c.record("The meeting is scheduled for Monday");
         std::this_thread::sleep_for(std::chrono::milliseconds(1500));
     }
     auto contents = readAll(p);
     REQUIRE(contents.find("ssn") == std::string::npos);
+    REQUIRE(contents.find("The meeting is scheduled for Monday") != std::string::npos);
     fs::remove_all(p.parent_path());
 }
 
@@ -372,10 +382,12 @@ TEST_CASE("privacy filter rejects CVV keyword", "[corpus][privacy]") {
     {
         CorpusCollector c(makeShortCfg(p));
         c.record("cvv 123 expiry 01/26");
+        c.record("We need to update our configuration soon");
         std::this_thread::sleep_for(std::chrono::milliseconds(1500));
     }
     auto contents = readAll(p);
     REQUIRE(contents.find("cvv") == std::string::npos);
+    REQUIRE(contents.find("We need to update our configuration soon") != std::string::npos);
     fs::remove_all(p.parent_path());
 }
 
@@ -384,10 +396,12 @@ TEST_CASE("privacy filter rejects bearer token prefix", "[corpus][privacy]") {
     {
         CorpusCollector c(makeShortCfg(p));
         c.record("bearer eyJhbGc...");
+        c.record("The result was better than expected");
         std::this_thread::sleep_for(std::chrono::milliseconds(1500));
     }
     auto contents = readAll(p);
     REQUIRE(contents.find("bearer") == std::string::npos);
+    REQUIRE(contents.find("The result was better than expected") != std::string::npos);
     fs::remove_all(p.parent_path());
 }
 
