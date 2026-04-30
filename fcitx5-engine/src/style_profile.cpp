@@ -15,12 +15,13 @@
 
 namespace {
 
-constexpr size_t kMaxScannedSentences = 1000;
-constexpr int    kMinSentenceChars    = 12;
-constexpr int    kBucketShortMax      = 49;   // [12, 49]
-constexpr int    kBucketMediumMax     = 100;  // [50, 100], long is [101, ∞)
-constexpr int    kMaxStaleScanBytes   = 5 * 1024 * 1024;
-constexpr int    kProfileSchemaVer    = 1;
+constexpr size_t      kMaxScannedSentences = 1000;
+constexpr int         kMinSentenceChars    = 12;
+constexpr int         kBucketShortMax      = 49;   // [12, 49]
+constexpr int         kBucketMediumMax     = 100;  // [50, 100], long is [101, ∞)
+constexpr int         kMaxStaleScanBytes   = 5 * 1024 * 1024;
+constexpr int         kProfileSchemaVer    = 1;
+constexpr std::streamsize kTailScanBytes   = 256 * 1024; // 256 KB
 
 // ── small utils ──────────────────────────────────────────────────────────────
 
@@ -305,6 +306,24 @@ bool findStringArray(std::string_view json, std::string_view key, std::vector<st
 
 }  // namespace
 
+// ── seed loader ──────────────────────────────────────────────────────────────
+
+std::vector<std::string> StyleProfile::loadSeedExemplars(const std::string& path) {
+    std::vector<std::string> result;
+    std::ifstream in(path);
+    if (!in) return result;
+    std::stringstream ss;
+    ss << in.rdbuf();
+    std::string json = ss.str();
+
+    long long version = 0;
+    if (!findIntValue(json, "version", version) || version != 1)
+        return result;
+
+    findStringArray(json, "exemplars", result);
+    return result;
+}
+
 // ── public API ───────────────────────────────────────────────────────────────
 
 void StyleProfile::loadFromCorpus(const std::string& corpus_path, unsigned seed) {
@@ -314,15 +333,36 @@ void StyleProfile::loadFromCorpus(const std::string& corpus_path, unsigned seed)
     _count      = 0;
     _lastUpdated = 0;
 
-    std::ifstream in(path_utils::expandTilde(corpus_path));
-    if (!in) return;
-
     std::vector<std::string> kept;
     kept.reserve(256);
-    std::string line;
-    while (std::getline(in, line) && kept.size() < kMaxScannedSentences) {
-        appendSentencesFromLine(line, kept);
+    {
+        std::ifstream in(path_utils::expandTilde(corpus_path),
+                         std::ios::binary | std::ios::ate);
+        if (in) {
+            const std::streamsize fileSize = static_cast<std::streamsize>(in.tellg());
+            const std::streamsize seekPos =
+                std::max(std::streamsize{0}, fileSize - kTailScanBytes);
+            in.seekg(seekPos);
+
+            if (seekPos > 0) {
+                std::string discard;
+                std::getline(in, discard);
+            }
+
+            std::string line;
+            while (std::getline(in, line) && kept.size() < kMaxScannedSentences) {
+                appendSentencesFromLine(line, kept);
+            }
+        }
     }
+
+    // Load rotation seed exemplars and prepend to candidate pool so the
+    // profiler can bootstrap immediately after a rotation even from an empty corpus.
+    // They are real corpus sentences (already privacy-filtered) from before rotation.
+    auto seedPath = std::filesystem::path(corpus_path).parent_path() / "corpus_seed.json";
+    auto seedExemplars = loadSeedExemplars(seedPath.string());
+    kept.insert(kept.begin(), seedExemplars.begin(), seedExemplars.end());
+
     if (kept.empty()) return;
 
     long long sum = 0;

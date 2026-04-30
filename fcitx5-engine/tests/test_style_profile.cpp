@@ -298,3 +298,36 @@ TEST_CASE("commonOpeners lowercases and counts", "[style][openers]") {
     REQUIRE_FALSE(sp.commonOpeners().empty());
     REQUIRE(sp.commonOpeners().front() == "the quick");
 }
+
+// ── recency (L1) ─────────────────────────────────────────────────────────────
+
+TEST_CASE("tail-read loads exemplars from corpus tail not head", "[style][recency]") {
+    auto d = uniqueDir("tail");
+    auto p = d / "corpus.txt";
+
+    {
+        std::ofstream out(p, std::ios::binary);
+        // 500 KB of "STALE\n" lines — 5 chars each, below kMinSentenceChars=12,
+        // so all are filtered even when encountered in the tail window.
+        const std::string staleLine = "STALE\n";
+        size_t written = 0;
+        while (written < 500 * 1024) {
+            out.write(staleLine.data(), static_cast<std::streamsize>(staleLine.size()));
+            written += staleLine.size();
+        }
+        // 10 fresh sentences that pass all filters (>=12 chars, alpha, no sensitive tokens).
+        for (int i = 0; i < 10; ++i) {
+            std::string s = "This is a fresh sentence number " + std::to_string(i) +
+                            " about the beauty of the natural world around us.\n";
+            out.write(s.data(), static_cast<std::streamsize>(s.size()));
+        }
+    }
+
+    StyleProfile sp;
+    sp.loadFromCorpus(p.string(), 42);
+    REQUIRE(sp.exemplars().size() >= 1);
+    for (const auto& e : sp.exemplars()) {
+        REQUIRE(e.find("fresh") != std::string::npos);
+    }
+    fs::remove_all(d);
+}
