@@ -247,6 +247,8 @@ void XTypeEngine::keyEvent(const fcitx::InputMethodEntry &,
     // Tab — accept next word; Shift+Tab / ISO_Left_Tab — accept entire suggestion.
     if (sym == FcitxKey_Tab || sym == FcitxKey_ISO_Left_Tab) {
         if (!hasSuggestion) return;
+        if (_corpus && !_userTypedSinceLastTerminator.empty())
+            harvestSentence(ic->program()); // flush typed-so-far before AI text appends to ctx
         bool acceptAll = (sym == FcitxKey_ISO_Left_Tab) ||
                          states.test(fcitx::KeyState::Shift);
         std::string committed = acceptAll ? _ctx.acceptAll() : _ctx.acceptNextWord();
@@ -280,6 +282,8 @@ void XTypeEngine::keyEvent(const fcitx::InputMethodEntry &,
     if (sym == FcitxKey_Return || sym == FcitxKey_KP_Enter) {
         if (hasSuggestion &&
             _cfg.behaviour.accept_full_key == AcceptKey::Enter) {
+            if (_corpus && !_userTypedSinceLastTerminator.empty())
+                harvestSentence(ic->program()); // flush typed-so-far before AI text appends to ctx
             std::string committed = _ctx.acceptAll();
             ic->commitString(committed);
             updatePreedit(ic);
@@ -324,6 +328,8 @@ void XTypeEngine::keyEvent(const fcitx::InputMethodEntry &,
     if (sym == FcitxKey_Right &&
         _cfg.behaviour.accept_full_key == AcceptKey::Right &&
         hasSuggestion) {
+        if (_corpus && !_userTypedSinceLastTerminator.empty())
+            harvestSentence(ic->program()); // flush typed-so-far before AI text appends to ctx
         std::string committed = _cfg.behaviour.partial_accept
                                 ? _ctx.acceptNextWord()
                                 : _ctx.acceptAll();
