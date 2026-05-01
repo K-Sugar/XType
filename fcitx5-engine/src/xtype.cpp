@@ -467,6 +467,8 @@ void XTypeEngine::requestInference(
     fcitx::TrackableObjectReference<fcitx::InputContext> icRef,
     fcitx::InputContext *icPtr)
 {
+    if (_profile) _profile->setCurrentApp(icPtr->program());
+
     auto ctx = _ctx.contextText();
     if (static_cast<int>(ctx.size()) < _cfg.inference.min_context_chars)
         return;
@@ -797,7 +799,7 @@ void XTypeEngine::harvestSentence(const std::string &program) {
         std::string snip = s.size() > 60 ? s.substr(0, 60) + "..." : s;
         dbg("[harvest] verbose content='%s'", snip.c_str());
     }
-    _corpus->record(std::move(s));
+    _corpus->record(std::move(s), program);
 }
 
 // ── Observability (E2) ────────────────────────────────────────────────────────
@@ -989,8 +991,9 @@ void XTypeEngine::kickProfileLoad() {
     std::string profilePath = _profilePathExpanded;
     std::string indexPath   = _embeddingIndexPath;
     std::string ollamaHost  = _cfg.inference.ollama_host;
+    std::string currentApp  = _lastProg;  // capture for app-weighted exemplar selection
 
-    _profileWorker.emplace([this, corpusPath, profilePath, indexPath, ollamaHost]() {
+    _profileWorker.emplace([this, corpusPath, profilePath, indexPath, ollamaHost, currentApp]() {
         StyleProfile sp = StyleProfile::deserialize(profilePath);
         bool stale = StyleProfile::isStale(corpusPath, profilePath);
         bool needRebuild = sp.exemplars().empty() || stale;
@@ -1001,6 +1004,7 @@ void XTypeEngine::kickProfileLoad() {
 
         if (needRebuild) {
             sp = StyleProfile{};
+            sp.setCurrentApp(currentApp);
             sp.loadFromCorpus(corpusPath);
             if (!sp.exemplars().empty()) {
                 sp.serialize(profilePath);

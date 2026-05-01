@@ -230,7 +230,7 @@ CorpusCollector::~CorpusCollector() {
 
 // ── public api ───────────────────────────────────────────────────────────────
 
-void CorpusCollector::record(std::string text) {
+void CorpusCollector::record(std::string text, std::string app) {
     if (_disabled) return;
     text = trim(std::move(text));
     if (!acceptable(text)) return;
@@ -238,7 +238,7 @@ void CorpusCollector::record(std::string text) {
     {
         std::lock_guard<std::mutex> lk(_mu);
         if (_queue.size() >= kQueueCap) _queue.pop_front();
-        _queue.push_back(std::move(text));
+        _queue.push_back({std::move(text), std::move(app)});
         if (_queue.size() >= kEagerFlushAt) _cv.notify_all();
     }
 }
@@ -449,7 +449,7 @@ bool CorpusCollector::acceptable(const std::string& text) const {
 void CorpusCollector::run() {
     using namespace std::chrono;
     while (true) {
-        std::deque<std::string> drained;
+        std::deque<CorpusEntry> drained;
         bool stopping = false;
         {
             std::unique_lock<std::mutex> lk(_mu);
@@ -465,7 +465,7 @@ void CorpusCollector::run() {
     }
 }
 
-void CorpusCollector::flushLocked(std::deque<std::string>& drained) {
+void CorpusCollector::flushLocked(std::deque<CorpusEntry>& drained) {
     std::ofstream out(_path, std::ios::app | std::ios::binary);
     if (!out) return;
 
@@ -474,8 +474,12 @@ void CorpusCollector::flushLocked(std::deque<std::string>& drained) {
     std::ofstream tsOut(tsPath, std::ios::app);
     std::time_t now = std::time(nullptr);
 
-    for (auto& line : drained) {
-        out.write(line.data(), static_cast<std::streamsize>(line.size()));
+    for (const auto& entry : drained) {
+        if (!entry.app.empty()) {
+            out.write(entry.app.data(), static_cast<std::streamsize>(entry.app.size()));
+            out.put('\t');
+        }
+        out.write(entry.text.data(), static_cast<std::streamsize>(entry.text.size()));
         out.put('\n');
         if (tsOut) tsOut << now << '\n';
     }

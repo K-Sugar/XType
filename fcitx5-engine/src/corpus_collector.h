@@ -12,6 +12,11 @@
 
 #include "config.h"
 
+struct CorpusEntry {
+    std::string text;
+    std::string app;  // empty = untagged
+};
+
 class CorpusCollector {
 public:
     explicit CorpusCollector(LearningConfig cfg);
@@ -24,7 +29,8 @@ public:
 
     // Thread-safe, non-blocking. Filters at record-time (length, code-shape,
     // whitespace-only, no-alpha). Drops oldest on queue overflow.
-    void record(std::string text);
+    // app is the program name (ic->program()); empty = untagged.
+    void record(std::string text, std::string app = "");
 
     // Hard-coded sensitive-app guard. Case-insensitive substring match against
     // a fixed list of password / secret managers. Always blocked, regardless of
@@ -47,7 +53,7 @@ public:
 
 private:
     void run();
-    void flushLocked(std::deque<std::string>& drained);
+    void flushLocked(std::deque<CorpusEntry>& drained);
     void rotateIfNeeded();
     void extractAndSeedExemplars();
     bool acceptable(const std::string& text) const;
@@ -61,12 +67,12 @@ private:
     std::filesystem::path   _path;
     bool                    _disabled{false};
 
-    std::mutex              _mu;
-    std::condition_variable _cv;
-    std::deque<std::string> _queue;
-    std::atomic<bool>       _shutdown{false};
-    std::thread             _thread;
-    LogFn                   _log;
+    std::mutex               _mu;
+    std::condition_variable  _cv;
+    std::deque<CorpusEntry>  _queue;
+    std::atomic<bool>        _shutdown{false};
+    std::thread              _thread;
+    LogFn                    _log;
 
     static constexpr size_t kQueueCap     = 1000;
     static constexpr size_t kEagerFlushAt = 100;

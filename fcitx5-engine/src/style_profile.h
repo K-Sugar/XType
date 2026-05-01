@@ -66,6 +66,10 @@ public:
     // voice_strength 0–100 maps to 0–kMaxEmbedExemplars retrieved sentences.
     static constexpr size_t kMaxEmbedExemplars = 20;
 
+    // Set the currently active app (ic->program()). Called before each inference
+    // request and before loadFromCorpus in the profile worker. Empty = no weighting.
+    void setCurrentApp(const std::string& app) { _currentApp = app; }
+
     // Build or refresh corpus_embeddings.bin on the background profile thread.
     // Freshness-checks the index against the corpus before embedding.
     // Blocking HTTP — must only be called from the profile worker std::thread.
@@ -88,4 +92,5 @@ private:
     std::vector<std::string> _openers;
     std::time_t              _lastUpdated{0};
     int                      _count{0};
+    std::string              _currentApp;  // set by setCurrentApp(); used in loadFromCorpus()
 };

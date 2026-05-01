@@ -360,7 +360,9 @@ void StyleProfile::loadFromCorpus(const std::string& corpus_path, unsigned seed)
     auto seedExemplars = loadSeedExemplars(seedPath.string());
 
     // Corpus-only sentences (no seeds): used for sort/trim/dedup.
+    // sentenceApp maps sentence text → first app tag seen (first-tab split; empty = untagged).
     std::vector<std::string> corpusSentences;
+    std::unordered_map<std::string, std::string> sentenceApp;
     corpusSentences.reserve(256);
     {
         std::ifstream in(expandedPath, std::ios::binary | std::ios::ate);
@@ -377,7 +379,20 @@ void StyleProfile::loadFromCorpus(const std::string& corpus_path, unsigned seed)
 
             std::string line;
             while (std::getline(in, line) && corpusSentences.size() < kMaxScannedSentences) {
-                appendSentencesFromLine(line, corpusSentences);
+                // Parse optional app-id prefix: "app\tsentence text" (L6 format).
+                // Lines without '\t' are untagged (old corpus, backwards compatible).
+                std::string app;
+                std::string text = line;
+                auto tab = line.find('\t');
+                if (tab != std::string::npos) {
+                    app  = line.substr(0, tab);
+                    text = line.substr(tab + 1);
+                }
+                size_t before = corpusSentences.size();
+                appendSentencesFromLine(text, corpusSentences);
+                // Record app tag for each sentence added (first occurrence wins on dup).
+                for (size_t k = before; k < corpusSentences.size(); ++k)
+                    sentenceApp.try_emplace(corpusSentences[k], app);
             }
         }
     }
@@ -421,6 +436,15 @@ void StyleProfile::loadFromCorpus(const std::string& corpus_path, unsigned seed)
     wts.reserve(unique.size());
     for (const auto& s : unique)
         wts.push_back(1.0 / static_cast<double>(freq.at(s)));
+
+    // App weighting (L6): sentences from the current app get 2× weight.
+    if (!_currentApp.empty()) {
+        for (size_t i = 0; i < unique.size(); ++i) {
+            auto it = sentenceApp.find(unique[i]);
+            if (it != sentenceApp.end() && it->second == _currentApp)
+                wts[i] *= 2.0;
+        }
+    }
 
     // Prepend seed sentences with weight 1.0 — they are unique by construction
     // (already privacy-filtered corpus sentences persisted across rotation).
@@ -670,7 +694,12 @@ void StyleProfile::buildEmbeddingIndex(const std::string& corpusPath,
 
         std::string line;
         while (std::getline(in, line) && sentences.size() < kMaxIndexedSentences) {
-            appendSentencesFromLine(line, sentences);
+            // Strip optional app-id prefix (L6 format) before embedding.
+            std::string text = line;
+            auto tab = line.find('\t');
+            if (tab != std::string::npos)
+                text = line.substr(tab + 1);
+            appendSentencesFromLine(text, sentences);
         }
     }
 
