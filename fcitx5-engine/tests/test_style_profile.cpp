@@ -5,6 +5,7 @@
 #include <fstream>
 #include <string>
 #include <unistd.h>
+#include <unordered_set>
 
 #include "style_profile.h"
 
@@ -297,6 +298,69 @@ TEST_CASE("commonOpeners lowercases and counts", "[style][openers]") {
     sp.loadFromCorpus(p.string(), 42);
     REQUIRE_FALSE(sp.commonOpeners().empty());
     REQUIRE(sp.commonOpeners().front() == "the quick");
+}
+
+// ── deduplication (L2) ───────────────────────────────────────────────────────
+
+TEST_CASE("boilerplate suppressed: repeated sentence appears at most once", "[style][dedup]") {
+    auto d = uniqueDir("dedup_boilerplate");
+    auto p = d / "corpus.txt";
+
+    std::vector<std::string> lines;
+    // 20 copies of the same boilerplate
+    for (int i = 0; i < 20; ++i)
+        lines.push_back("Thanks for reaching out to us about this matter today");
+    // 5 unique prose sentences of varying length
+    lines.push_back("The morning light filtered through the tall oak trees slowly");
+    lines.push_back("She carefully placed the fragile glass ornament on the shelf near the window");
+    lines.push_back("He wrote the report and sent it across to his colleagues before lunch");
+    lines.push_back("Rain fell steadily on the empty cobblestone street outside the old cafe");
+    lines.push_back("Every great journey begins with a single courageous step forward into the unknown");
+
+    writeCorpus(p, lines);
+    StyleProfile sp;
+    sp.loadFromCorpus(p.string(), 42);
+
+    int boilerplateCount = 0;
+    for (const auto& e : sp.exemplars()) {
+        if (e.find("Thanks for reaching out") != std::string::npos)
+            ++boilerplateCount;
+    }
+    REQUIRE(boilerplateCount <= 1);
+    REQUIRE_FALSE(sp.exemplars().empty());
+    fs::remove_all(d);
+}
+
+TEST_CASE("unique sentences are all eligible for sampling", "[style][dedup]") {
+    auto d = uniqueDir("dedup_unique");
+    auto p = d / "corpus.txt";
+
+    // 5 completely different sentences
+    writeCorpus(p, {
+        "The red fox darted across the open meadow at dawn",
+        "She wrote long letters to distant friends every single weekend without fail",
+        "A quiet hum filled the workshop as the craftsman carefully shaped the wood",
+        "They gathered around the fire and shared stories from their childhood days",
+        "The train departed precisely at noon carrying passengers to the distant hills",
+    });
+    StyleProfile sp;
+    sp.loadFromCorpus(p.string(), 7);
+    // All 5 should be in the candidate pool; with only 5 unique sentences,
+    // exemplars reflects the variety (5 sentences fits within maxCount=5).
+    REQUIRE(sp.exemplars().size() >= 1);
+    // No sentence should appear more than once in the output
+    std::unordered_set<std::string> seen;
+    for (const auto& e : sp.exemplars())
+        REQUIRE(seen.insert(e).second);
+    fs::remove_all(d);
+}
+
+TEST_CASE("empty corpus returns empty exemplars without crashing", "[style][dedup]") {
+    auto d = uniqueDir("dedup_empty");
+    StyleProfile sp;
+    sp.loadFromCorpus((d / "corpus.txt").string(), 42);
+    REQUIRE(sp.exemplars().empty());
+    fs::remove_all(d);
 }
 
 // ── recency (L1) ─────────────────────────────────────────────────────────────

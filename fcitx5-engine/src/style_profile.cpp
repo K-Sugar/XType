@@ -6,10 +6,13 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <optional>
 #include <random>
 #include <sstream>
 #include <string_view>
 #include <system_error>
+#include <unordered_map>
+#include <unordered_set>
 
 #include "path_utils.h"
 
@@ -114,38 +117,48 @@ void appendSentencesFromLine(const std::string& line, std::vector<std::string>& 
 
 // ── exemplar sampler ─────────────────────────────────────────────────────────
 
-std::vector<std::string> pickExemplars(std::vector<std::string> pool, unsigned seed) {
+std::vector<std::string> pickExemplars(
+    const std::vector<std::string>& sentences,
+    const std::vector<double>&      weights,
+    size_t                          maxCount,
+    unsigned                        seed = 0)
+{
     std::vector<std::string> result;
-    if (pool.empty()) return result;
+    if (sentences.empty()) return result;
 
-    std::vector<std::string> shortB, mediumB, longB;
-    for (auto& s : pool) {
-        int n = static_cast<int>(s.size());
-        if      (n <= kBucketShortMax)  shortB.push_back(std::move(s));
-        else if (n <= kBucketMediumMax) mediumB.push_back(std::move(s));
-        else                            longB.push_back(std::move(s));
+    struct Bucket { std::vector<size_t> indices; std::vector<double> weights; };
+    Bucket shortB, medB, longB;
+
+    for (size_t i = 0; i < sentences.size(); ++i) {
+        size_t len = sentences[i].size();
+        double w   = weights[i];
+        if      (len <= kBucketShortMax)  { shortB.indices.push_back(i); shortB.weights.push_back(w); }
+        else if (len <= kBucketMediumMax) { medB.indices.push_back(i);   medB.weights.push_back(w); }
+        else                              { longB.indices.push_back(i);  longB.weights.push_back(w); }
     }
 
     std::mt19937 rng(seed == 0 ? static_cast<unsigned>(std::time(nullptr)) : seed);
-    auto pickOne = [&](std::vector<std::string>& bucket) {
-        if (bucket.empty()) return;
-        std::uniform_int_distribution<size_t> dist(0, bucket.size() - 1);
-        size_t idx = dist(rng);
-        result.push_back(std::move(bucket[idx]));
-        bucket.erase(bucket.begin() + idx);
+
+    auto pickOne = [&](Bucket& b) -> std::optional<std::string> {
+        if (b.indices.empty()) return std::nullopt;
+        std::discrete_distribution<size_t> dist(b.weights.begin(), b.weights.end());
+        size_t pos    = dist(rng);
+        size_t chosen = b.indices[pos];
+        b.indices.erase(b.indices.begin() + pos);
+        b.weights.erase(b.weights.begin() + pos);
+        return sentences[chosen];
     };
 
-    pickOne(shortB);
-    pickOne(mediumB);
-    pickOne(longB);
+    if (auto s = pickOne(shortB)) result.push_back(std::move(*s));
+    if (auto s = pickOne(medB))   result.push_back(std::move(*s));
+    if (auto s = pickOne(longB))  result.push_back(std::move(*s));
 
-    // Fill up to 5 from the largest remaining bucket each round.
-    while (result.size() < 5) {
-        std::vector<std::string>* b = &shortB;
-        if (mediumB.size() > b->size()) b = &mediumB;
-        if (longB.size()   > b->size()) b = &longB;
-        if (b->empty()) break;
-        pickOne(*b);
+    while (result.size() < maxCount) {
+        Bucket* b = &shortB;
+        if (medB.indices.size() > b->indices.size()) b = &medB;
+        if (longB.indices.size() > b->indices.size()) b = &longB;
+        if (b->indices.empty()) break;
+        if (auto s = pickOne(*b)) result.push_back(std::move(*s));
     }
 
     return result;
@@ -341,8 +354,9 @@ void StyleProfile::loadFromCorpus(const std::string& corpus_path, unsigned seed)
     auto seedPath = expandedPath.parent_path() / "corpus_seed.json";
     auto seedExemplars = loadSeedExemplars(seedPath.string());
 
-    std::vector<std::string> kept;
-    kept.reserve(256);
+    // Corpus-only sentences (no seeds): used for sort/trim/dedup.
+    std::vector<std::string> corpusSentences;
+    corpusSentences.reserve(256);
     {
         std::ifstream in(expandedPath, std::ios::binary | std::ios::ate);
         if (in) {
@@ -357,12 +371,14 @@ void StyleProfile::loadFromCorpus(const std::string& corpus_path, unsigned seed)
             }
 
             std::string line;
-            while (std::getline(in, line) && kept.size() < kMaxScannedSentences) {
-                appendSentencesFromLine(line, kept);
+            while (std::getline(in, line) && corpusSentences.size() < kMaxScannedSentences) {
+                appendSentencesFromLine(line, corpusSentences);
             }
         }
     }
 
+    // kept = seeds + corpus: used for avgChars/count/openers (mirrors L5 behaviour).
+    std::vector<std::string> kept = corpusSentences;
     kept.insert(kept.begin(), seedExemplars.begin(), seedExemplars.end());
 
     if (kept.empty() && seedExemplars.empty()) return;
@@ -374,8 +390,8 @@ void StyleProfile::loadFromCorpus(const std::string& corpus_path, unsigned seed)
         _count    = static_cast<int>(kept.size());
     }
 
-    // Sort by length, drop longest 5% and shortest 5%.
-    std::vector<std::string> sorted = kept;
+    // Sort corpus-only sentences by length, drop shortest and longest 5%.
+    std::vector<std::string> sorted = corpusSentences;
     std::sort(sorted.begin(), sorted.end(),
               [](const auto& a, const auto& b) { return a.size() < b.size(); });
     size_t drop = sorted.size() / 20;
@@ -386,11 +402,30 @@ void StyleProfile::loadFromCorpus(const std::string& corpus_path, unsigned seed)
         pool = std::move(sorted);
     }
 
-    // Prepend seed sentences to the candidate pool so they are eligible for sampling.
-    // They are real corpus sentences (already privacy-filtered) from before rotation.
-    pool.insert(pool.begin(), seedExemplars.begin(), seedExemplars.end());
+    // Deduplicate and build inverse-frequency weights (boilerplate suppression).
+    std::unordered_map<std::string, int> freq;
+    for (const auto& s : pool) freq[s]++;
 
-    _exemplars   = pickExemplars(std::move(pool), seed);
+    std::vector<std::string> unique;
+    std::unordered_set<std::string> seen;
+    for (const auto& s : pool) {
+        if (seen.insert(s).second) unique.push_back(s);
+    }
+
+    std::vector<double> wts;
+    wts.reserve(unique.size());
+    for (const auto& s : unique)
+        wts.push_back(1.0 / static_cast<double>(freq.at(s)));
+
+    // Prepend seed sentences with weight 1.0 — they are unique by construction
+    // (already privacy-filtered corpus sentences persisted across rotation).
+    if (!seedExemplars.empty()) {
+        std::vector<double> seedWeights(seedExemplars.size(), 1.0);
+        unique.insert(unique.begin(), seedExemplars.begin(), seedExemplars.end());
+        wts.insert(wts.begin(), seedWeights.begin(), seedWeights.end());
+    }
+
+    _exemplars   = pickExemplars(unique, wts, 5, seed);
     _openers     = computeCommonOpeners(kept);
     _lastUpdated = std::time(nullptr);
 }
