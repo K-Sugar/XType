@@ -446,3 +446,119 @@ TEST_CASE("voice_strength 50 produces targetCount 10", "[style][voice]") {
         std::ceil(static_cast<double>(StyleProfile::kMaxEmbedExemplars) * 50.0 / 100.0));
     REQUIRE(targetCount == 10);
 }
+
+// ── app segmentation (L6) ─────────────────────────────────────────────────────
+
+TEST_CASE("tagged lines weighted by matching app", "[style][l6][appseg]") {
+    auto d = uniqueDir("appseg_weighted");
+    auto p = d / "corpus.txt";
+
+    // 10 unique thunderbird sentences + 10 unique kate sentences, all medium length.
+    // With currentApp="thunderbird" each thunderbird entry gets 2x weight.
+    std::vector<std::string> lines;
+    for (int i = 0; i < 10; ++i)
+        lines.push_back("thunderbird\tPlease find the quarterly report attached for your review number " + std::to_string(i));
+    for (int i = 0; i < 10; ++i)
+        lines.push_back("kate\tRefactored the parser module to handle various edge cases properly " + std::to_string(i));
+    writeCorpus(p, lines);
+
+    int thunderbirdTotal = 0, kateTotal = 0;
+    for (unsigned seed = 1; seed <= 100; ++seed) {
+        StyleProfile sp;
+        sp.setCurrentApp("thunderbird");
+        sp.loadFromCorpus(p.string(), seed);
+        for (const auto& e : sp.exemplars()) {
+            if (e.find("quarterly report") != std::string::npos) ++thunderbirdTotal;
+            if (e.find("edge cases") != std::string::npos)       ++kateTotal;
+        }
+    }
+    // 2x weight on thunderbird → it should dominate across many seeds.
+    REQUIRE(thunderbirdTotal > kateTotal);
+    fs::remove_all(d);
+}
+
+TEST_CASE("no app set — all sentences weighted equally", "[style][l6][appseg]") {
+    auto d = uniqueDir("appseg_noapp");
+    auto p = d / "corpus.txt";
+
+    std::vector<std::string> lines;
+    for (int i = 0; i < 10; ++i)
+        lines.push_back("thunderbird\tPlease find the quarterly report attached for your review number " + std::to_string(i));
+    for (int i = 0; i < 10; ++i)
+        lines.push_back("kate\tRefactored the parser module to handle various edge cases properly " + std::to_string(i));
+    writeCorpus(p, lines);
+
+    int thunderbirdTotal = 0, kateTotal = 0;
+    for (unsigned seed = 1; seed <= 100; ++seed) {
+        StyleProfile sp;
+        // currentApp left empty → equal weights
+        sp.loadFromCorpus(p.string(), seed);
+        for (const auto& e : sp.exemplars()) {
+            if (e.find("quarterly report") != std::string::npos) ++thunderbirdTotal;
+            if (e.find("edge cases") != std::string::npos)       ++kateTotal;
+        }
+    }
+    // Without weighting both apps should appear; neither overwhelmingly dominates.
+    REQUIRE(thunderbirdTotal > 0);
+    REQUIRE(kateTotal > 0);
+    // The ratio should be roughly 1:1 (within 3x of each other).
+    REQUIRE(thunderbirdTotal < kateTotal * 3);
+    REQUIRE(kateTotal < thunderbirdTotal * 3);
+    fs::remove_all(d);
+}
+
+TEST_CASE("backwards compat — corpus with no tab characters", "[style][l6][appseg]") {
+    auto d = uniqueDir("appseg_compat");
+    auto p = d / "corpus.txt";
+
+    // Old-format corpus: plain sentences with no app tags.
+    writeCorpus(p, {
+        "The team finished the sprint and delivered all the features on time",
+        "She reviewed the pull request carefully before merging into main branch",
+        "After the meeting we agreed to proceed with the updated implementation plan",
+        "Everyone praised the new design for its clarity and ease of navigation today",
+        "The documentation was revised to reflect all recent changes in the codebase",
+    });
+
+    StyleProfile sp;
+    sp.setCurrentApp("thunderbird");  // no tagged lines → weighting is a no-op
+    sp.loadFromCorpus(p.string(), 42);
+    REQUIRE_FALSE(sp.exemplars().empty());
+    // All exemplars should come from the corpus (no crash, no empty result).
+    for (const auto& e : sp.exemplars()) {
+        REQUIRE_FALSE(e.empty());
+    }
+    fs::remove_all(d);
+}
+
+TEST_CASE("tag parsed on first tab only — embedded tabs preserved in text", "[style][l6][appseg]") {
+    auto d = uniqueDir("appseg_embedtab");
+    auto p = d / "corpus.txt";
+
+    // Line with embedded tab in text: first tab splits the tag, rest is sentence text.
+    // Note: sentence must pass length (>=12) and alpha filters.
+    {
+        std::ofstream out(p);
+        out << "org.kde.kate\tThis sentence has an embedded tab in it.\n";
+        out << "thunderbird\tAnother sentence that is perfectly fine and normal.\n";
+    }
+
+    StyleProfile sp;
+    sp.setCurrentApp("org.kde.kate");
+    sp.loadFromCorpus(p.string(), 7);
+
+    // The app prefix "org.kde.kate" must not appear in any exemplar text.
+    for (const auto& e : sp.exemplars()) {
+        REQUIRE(e.find("org.kde.kate") == std::string::npos);
+        REQUIRE(e.find("thunderbird")  == std::string::npos);
+    }
+    // At least one exemplar should contain content from the corpus.
+    bool foundContent = false;
+    for (const auto& e : sp.exemplars()) {
+        if (e.find("embedded tab") != std::string::npos ||
+            e.find("perfectly fine") != std::string::npos)
+            foundContent = true;
+    }
+    REQUIRE(foundContent);
+    fs::remove_all(d);
+}

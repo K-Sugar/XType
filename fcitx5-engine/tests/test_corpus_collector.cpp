@@ -578,3 +578,32 @@ TEST_CASE("rotation writes corpus_seed.json before rename", "[corpus][l5][rotati
 
     fs::remove_all(dir);
 }
+
+// ── L6: per-app tagged write format ─────────────────────────────────────────
+
+TEST_CASE("record with app writes tagged format; record without app writes plain", "[corpus][l6][write]") {
+    auto p = makeTempCorpusPath("l6_tagged_write");
+    {
+        CorpusCollector c(makeCfg(p));
+        c.record("Please find the attached proposal for your review today", "thunderbird");
+        c.record("Refactored the parser module to handle all edge cases now", "kate");
+        c.record("This is a regular untagged sentence without any app tag");
+        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+    }
+    auto contents = readAll(p);
+
+    // Tagged entries must have the format "app\ttext".
+    REQUIRE(contents.find("thunderbird\t") != std::string::npos);
+    REQUIRE(contents.find("kate\t")        != std::string::npos);
+
+    // Sentence text must appear after the tag.
+    REQUIRE(contents.find("attached proposal") != std::string::npos);
+    REQUIRE(contents.find("edge cases") != std::string::npos);
+
+    // Untagged entry must appear and must NOT have a tab immediately before it.
+    auto untaggedPos = contents.find("This is a regular untagged sentence");
+    REQUIRE(untaggedPos != std::string::npos);
+    REQUIRE((untaggedPos == 0 || contents[untaggedPos - 1] == '\n'));
+
+    fs::remove_all(p.parent_path());
+}
