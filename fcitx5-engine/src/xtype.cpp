@@ -67,17 +67,6 @@ XTypeEngine::XTypeEngine(fcitx::AddonManager *manager)
         _cfg.inference.debounce_ms,
         (int)_cfg.behaviour.engine_enabled);
 
-    // Observability env reads (once, on the main thread).
-    {
-        const char* v = std::getenv("XTYPE_DEBUG_VERBOSE");
-        if (v && *v && v[0] != '0') _debugVerbose = true;
-        // Sentinel file fallback: ~/.local/share/xtype/.debug_verbose
-        if (!_debugVerbose) {
-            auto sentinel = path_utils::expandTilde("~/.local/share/xtype/.debug_verbose");
-            std::error_code ec;
-            if (std::filesystem::exists(sentinel, ec)) _debugVerbose = true;
-        }
-    }
     {
         const char* r = std::getenv("XTYPE_PROFILE_REFRESH_SEC");
         if (r && *r) {
@@ -90,8 +79,6 @@ XTypeEngine::XTypeEngine(fcitx::AddonManager *manager)
 
     _phraseBlock.load(_cfg.behaviour.blocked_phrases);
     dbg("XTypeEngine loaded, model=%s", _cfg.inference.model.c_str());
-    if (_debugVerbose)
-        dbg("[debug] verbose mode ON — sentence content will be written to debug.log");
     if (_profileRefreshSec != kProfileRefreshSec)
         dbg("[profile] refresh interval override: %d sec", _profileRefreshSec);
 
@@ -197,6 +184,7 @@ void XTypeEngine::deactivate(const fcitx::InputMethodEntry &,
     // effect. Called unconditionally so Chromium always commits empty rather than ghost text.
     ic->commitString("");
     clearPreedit(ic);
+    bool userTypedThisSession = !_userTypedSinceLastTerminator.empty();
     if (_corpus &&
         static_cast<int>(_userTypedSinceLastTerminator.size()) >=
             _cfg.learning.min_sentence_chars) {
@@ -205,7 +193,10 @@ void XTypeEngine::deactivate(const fcitx::InputMethodEntry &,
         _userTypedSinceLastTerminator.clear();
     }
     _ctx.dismiss();
-    resetInferenceOnly(); // cancel debounce + inference; _ctx typed text preserved for same-app cycling
+    // Any real typing → clear _ctx so next session starts fresh.
+    // Pure focus bounces (no chars typed) preserve _ctx for GTK4 rapid cycling.
+    if (userTypedThisSession) _ctx.reset();
+    resetInferenceOnly(); // cancel debounce + inference
 }
 
 void XTypeEngine::reset(const fcitx::InputMethodEntry &,
@@ -354,8 +345,7 @@ void XTypeEngine::keyEvent(const fcitx::InputMethodEntry &,
     // Printable ASCII (space through ~). Pass key through to app, update buffer,
     // arm debounce timer for inference.
     if (sym >= FcitxKey_space && sym <= FcitxKey_asciitilde) {
-        dbg("key '%c' prog=%s ctx_len=%zu", static_cast<char>(sym),
-            ic->program().c_str(), _ctx.contextText().size());
+        dbg("key prog=%s ctx_len=%zu", ic->program().c_str(), _ctx.contextText().size());
         invalidate();
         updatePreedit(ic);
         const char ch = static_cast<char>(sym);
@@ -583,13 +573,12 @@ void XTypeEngine::requestInference(
         }
     }
 
-    dbg("requestInference ctx='%.40s...'", ctx.c_str());
+    dbg("requestInference ctx_len=%zu", ctx.size());
     auto snapPtr = std::make_shared<std::string>(ctx);  // snapshot; shared ownership
     _inference.request(
         std::move(ctx),
         std::move(reqCfg),
         [this, myGen, icRef, icPtr, snapPtr](std::string token) {
-            dbg("token received: '%s' icValid=%d", token.c_str(), (int)icRef.isValid());
             if (!icRef.isValid()) { dbg("on_token: icRef invalid — dropping"); return; }
             _instance->eventDispatcher().scheduleWithContext(
                 icRef,
@@ -617,11 +606,7 @@ void XTypeEngine::requestInference(
                         }
                     }
                     if (!isTailEcho) {
-                        dbg("preedit updated: '%s'", accumulated.c_str());
                         updatePreedit(icPtr);
-                    } else {
-                        dbg("on_token: tail-echo suppressed for '%s'",
-                            accumulated.c_str());
                     }
                 });
         },
@@ -794,11 +779,6 @@ void XTypeEngine::harvestSentence(const std::string &program) {
         return;
     }
     dbg("[harvest] ok len=%zu", s.size());
-    if (_debugVerbose) {
-        // Cap snippet to first 60 chars so very long sentences don't blow up the log.
-        std::string snip = s.size() > 60 ? s.substr(0, 60) + "..." : s;
-        dbg("[harvest] verbose content='%s'", snip.c_str());
-    }
     _corpus->record(std::move(s), program);
 }
 

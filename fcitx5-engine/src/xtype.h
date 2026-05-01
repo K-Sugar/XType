@@ -103,11 +103,7 @@ private:
     std::string                              _profilePathExpanded;
     std::string                              _embeddingIndexPath;
 
-    // Observability (Session 17.5). _debugVerbose is set once at engine load
-    // from XTYPE_DEBUG_VERBOSE env or the sentinel file
-    // ~/.local/share/xtype/.debug_verbose; _profileRefreshSec from
-    // XTYPE_PROFILE_REFRESH_SEC (clamped >= 30).
-    bool                                     _debugVerbose{false};
+    // XTYPE_PROFILE_REFRESH_SEC overrides the profile refresh interval (clamped >= 30).
     int                                      _profileRefreshSec{300};
 
     // Latency tracking: rolling window of last 32 inference durations (ms).
