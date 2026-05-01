@@ -190,10 +190,6 @@ void InferenceClient::set_system_prompt(std::string s) {
     size_t was = _system_prompt.size();
     _system_prompt = std::move(s);
     iclog("[prompt] set %zu chars (was %zu)", _system_prompt.size(), was);
-    if (const char* v = std::getenv("XTYPE_DEBUG_VERBOSE"); v && *v && v[0] != '0') {
-        std::string head = _system_prompt.substr(0, std::min<size_t>(200, _system_prompt.size()));
-        iclog("[prompt] verbose head='%s'", head.c_str());
-    }
 }
 
 std::string_view InferenceClient::base_system_prompt() {
@@ -278,7 +274,7 @@ void InferenceClient::run() {
 }
 
 void InferenceClient::execute(Req& req) {
-    iclog("execute: gen=%llu model='%s' ctx='%.40s'", (unsigned long long)req.gen, req.cfg.model.c_str(), req.context.c_str());
+    iclog("execute: gen=%llu model='%s' ctx_len=%zu", (unsigned long long)req.gen, req.cfg.model.c_str(), req.context.size());
     CURL* curl = curl_easy_init();
     if (!curl) {
         iclog("execute: curl_easy_init failed");
@@ -325,7 +321,7 @@ void InferenceClient::execute(Req& req) {
 
     // Flush any data not terminated by \n (last chunk from Ollama may omit it).
     if (!ws.line_buf.empty()) {
-        iclog("execute: flushing line_buf='%.200s'", ws.line_buf.c_str());
+        iclog("execute: flushing line_buf len=%zu", ws.line_buf.size());
         auto token = json_str(ws.line_buf, "content");
         if (!token.empty()) req.on_token(std::move(token));
         ws.line_buf.clear();

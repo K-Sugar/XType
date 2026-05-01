@@ -221,7 +221,10 @@ void XTypeEngine::keyEvent(const fcitx::InputMethodEntry &,
 
     auto *ic = event.inputContext();
 
-    // Blocklisted apps pass everything through.
+    // Hard-blocked apps (system auth dialogs, password managers) pass through completely —
+    // no corpus collection, no inference, no context buffering.
+    if (CorpusCollector::isHardBlocked(ic->program())) return;
+    // User-configured blocklist.
     if (isBlocked(ic->program())) return;
 
     // Per-app override: if enabled is explicitly false, pass through.

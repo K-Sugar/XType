@@ -16,8 +16,11 @@
 
 namespace {
 
-constexpr std::array<std::string_view, 5> kAlwaysBlocked = {
-    "keepassxc", "1password", "bitwarden", "gnome-keyring", "seahorse"
+constexpr std::array<std::string_view, 11> kAlwaysBlocked = {
+    // Password managers
+    "keepassxc", "1password", "bitwarden", "gnome-keyring", "seahorse",
+    // System authentication dialogs — these receive passwords via keyboard
+    "polkit", "policykit", "pkexec", "gksu", "kdesu", "sudo"
 };
 
 std::string toLower(std::string_view s) {
