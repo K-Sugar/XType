@@ -26,8 +26,11 @@ public:
     // Thread-safe. Each new call cancels any in-flight request.
     // cfg is snapshotted into the Req so execute() uses it on the worker thread
     // without racing against update_config() on the main thread.
+    // If prompt_factory is set, it is called on the worker thread before building the
+    // CURL request; its return value overrides the stored system prompt for this request.
     void request(std::string context, InferenceConfig cfg,
-                 TokenCb on_token, DoneCb on_done, ErrCb on_error);
+                 TokenCb on_token, DoneCb on_done, ErrCb on_error,
+                 std::function<std::string()> prompt_factory = {});
     void cancel();
     bool health_check();  // blocking GET /api/tags
 
@@ -43,12 +46,13 @@ public:
 
 private:
     struct Req {
-        std::string     context;
-        InferenceConfig cfg;     // snapshotted at request() time; used by execute()
-        uint64_t        gen{};
-        TokenCb         on_token;
-        DoneCb          on_done;
-        ErrCb           on_error;
+        std::string                  context;
+        InferenceConfig              cfg;     // snapshotted at request() time; used by execute()
+        uint64_t                     gen{};
+        TokenCb                      on_token;
+        DoneCb                       on_done;
+        ErrCb                        on_error;
+        std::function<std::string()> prompt_factory;  // if set, called on worker thread before CURL
     };
 
     void run();

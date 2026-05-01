@@ -3,7 +3,9 @@
 #include <atomic>
 #include <cstdint>
 #include <ctime>
+#include <deque>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <thread>
@@ -19,6 +21,7 @@
 #include "config.h"
 #include "context_buffer.h"
 #include "corpus_collector.h"
+#include "embed_client.h"
 #include "engine_metrics.h"
 #include "inference_client.h"
 #include "phrase_blocklist.h"
@@ -63,9 +66,24 @@ private:
     void armProfileRefreshTimer();
     void applyPrompt();
 
+    // Embedding retrieval (L4). Called on InferenceClient's worker thread.
+    // acceptRingSnap is a copy taken on the main thread before the factory was created.
+    std::vector<std::string> retrieveExemplars(const std::string& contextText,
+                                               size_t maxCount,
+                                               const std::deque<std::vector<float>>& acceptRingSnap);
+
     fcitx::Instance                         *_instance;
     XTypeConfig                              _cfg;
     ContextBuffer                            _ctx;
+
+    // L4 embedding members — declared before _inference so they outlive its worker thread.
+    std::unique_ptr<OllamaEmbedClient>               _embedClient;
+    std::shared_ptr<std::vector<EmbeddingEntry>>     _embeddingIndex;      // guarded by _embedMutex
+    static constexpr size_t                          kAcceptRingSize = 20;
+    std::deque<std::vector<float>>                   _acceptEmbedRing;     // main-thread only
+    std::vector<float>                               _lastQueryEmbedding;  // guarded by _embedMutex
+    mutable std::mutex                               _embedMutex;          // guards _embeddingIndex + _lastQueryEmbedding
+
     InferenceClient                          _inference;
     EngineMetrics                            _metrics;
     RecentEventsRing                         _recent;

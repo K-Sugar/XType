@@ -218,12 +218,14 @@ InferenceClient::~InferenceClient() {
 }
 
 void InferenceClient::request(std::string context, InferenceConfig cfg,
-                              TokenCb on_token, DoneCb on_done, ErrCb on_error) {
+                              TokenCb on_token, DoneCb on_done, ErrCb on_error,
+                              std::function<std::string()> prompt_factory) {
     uint64_t gen = ++_gen;
     {
         std::lock_guard<std::mutex> lk(_mutex);
         _pending = Req{std::move(context), std::move(cfg), gen,
-                       std::move(on_token), std::move(on_done), std::move(on_error)};
+                       std::move(on_token), std::move(on_done), std::move(on_error),
+                       std::move(prompt_factory)};
     }
     _cv.notify_one();
 }
@@ -285,7 +287,16 @@ void InferenceClient::execute(Req& req) {
     }
 
     std::string prompt_snapshot;
-    {
+    if (req.prompt_factory) {
+        // Call factory on this worker thread (may block on embed HTTP).
+        prompt_snapshot = req.prompt_factory();
+        // If the request was superseded while the factory ran, discard it.
+        if (req.gen != _gen.load(std::memory_order_relaxed)) {
+            curl_easy_cleanup(curl);
+            return;
+        }
+    }
+    if (prompt_snapshot.empty()) {
         std::lock_guard<std::mutex> lk(_mutex);
         prompt_snapshot = _system_prompt;  // frozen for this request
     }

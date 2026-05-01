@@ -61,6 +61,7 @@ XTypeEngine::XTypeEngine(fcitx::AddonManager *manager)
       _inference(_cfg.inference)
 {
     _cfg = config_loader::load();
+    _embedClient = std::make_unique<OllamaEmbedClient>(_cfg.inference.ollama_host);
     dbg("config loaded: model=%s debounce=%dms engine_enabled=%d",
         _cfg.inference.model.c_str(),
         _cfg.inference.debounce_ms,
@@ -257,6 +258,14 @@ void XTypeEngine::keyEvent(const fcitx::InputMethodEntry &,
         std::string committed = acceptAll ? _ctx.acceptAll() : _ctx.acceptNextWord();
         ic->commitString(committed);
         updatePreedit(ic);
+        {
+            std::vector<float> lastEmbed;
+            { std::lock_guard<std::mutex> lk(_embedMutex); lastEmbed = std::move(_lastQueryEmbedding); _lastQueryEmbedding.clear(); }
+            if (!lastEmbed.empty()) {
+                if (_acceptEmbedRing.size() >= kAcceptRingSize) _acceptEmbedRing.pop_front();
+                _acceptEmbedRing.push_back(std::move(lastEmbed));
+            }
+        }
         ++_metrics.suggestions_accepted;
         _metrics.chars_accepted += committed.size();
         _recent.set_last_accepted();
@@ -280,6 +289,14 @@ void XTypeEngine::keyEvent(const fcitx::InputMethodEntry &,
             std::string committed = _ctx.acceptAll();
             ic->commitString(committed);
             updatePreedit(ic);
+            {
+                std::vector<float> lastEmbed;
+                { std::lock_guard<std::mutex> lk(_embedMutex); lastEmbed = std::move(_lastQueryEmbedding); _lastQueryEmbedding.clear(); }
+                if (!lastEmbed.empty()) {
+                    if (_acceptEmbedRing.size() >= kAcceptRingSize) _acceptEmbedRing.pop_front();
+                    _acceptEmbedRing.push_back(std::move(lastEmbed));
+                }
+            }
             ++_metrics.suggestions_accepted;
             _metrics.chars_accepted += committed.size();
             _recent.set_last_accepted();
@@ -318,6 +335,14 @@ void XTypeEngine::keyEvent(const fcitx::InputMethodEntry &,
                                 : _ctx.acceptAll();
         ic->commitString(committed);
         updatePreedit(ic);
+        {
+            std::vector<float> lastEmbed;
+            { std::lock_guard<std::mutex> lk(_embedMutex); lastEmbed = std::move(_lastQueryEmbedding); _lastQueryEmbedding.clear(); }
+            if (!lastEmbed.empty()) {
+                if (_acceptEmbedRing.size() >= kAcceptRingSize) _acceptEmbedRing.pop_front();
+                _acceptEmbedRing.push_back(std::move(lastEmbed));
+            }
+        }
         ++_metrics.suggestions_accepted;
         _metrics.chars_accepted += committed.size();
         _recent.set_last_accepted();
@@ -370,6 +395,58 @@ void XTypeEngine::keyEvent(const fcitx::InputMethodEntry &,
     }
 
     // Everything else passes through.
+}
+
+// ── Embedding retrieval (L4) ──────────────────────────────────────────────────
+
+static std::vector<std::string> scoreAndRankExemplars(
+    const std::vector<EmbeddingEntry>& index,
+    const std::vector<float>& queryVec,
+    const std::deque<std::vector<float>>& acceptRing,
+    size_t maxCount)
+{
+    if (index.empty() || queryVec.empty() || maxCount == 0) return {};
+    std::vector<std::pair<float, size_t>> scores;
+    scores.reserve(index.size());
+    for (size_t i = 0; i < index.size(); ++i) {
+        const auto& entry = index[i];
+        float dot = 0.f;
+        size_t dim = std::min(queryVec.size(), entry.embedding.size());
+        for (size_t d = 0; d < dim; ++d) dot += queryVec[d] * entry.embedding[d];
+        float acceptBoost = 0.f;
+        for (const auto& av : acceptRing) {
+            float ab = 0.f;
+            size_t adim = std::min(av.size(), entry.embedding.size());
+            for (size_t d = 0; d < adim; ++d) ab += av[d] * entry.embedding[d];
+            acceptBoost = std::max(acceptBoost, ab);
+        }
+        scores.emplace_back(0.7f * dot + 0.3f * acceptBoost, i);
+    }
+    size_t n = std::min(maxCount, scores.size());
+    std::partial_sort(scores.begin(), scores.begin() + n, scores.end(),
+                      [](const auto& a, const auto& b){ return a.first > b.first; });
+    std::vector<std::string> results;
+    results.reserve(n);
+    for (size_t i = 0; i < n; ++i)
+        results.push_back(index[scores[i].second].text);
+    return results;
+}
+
+std::vector<std::string> XTypeEngine::retrieveExemplars(
+    const std::string& contextText,
+    size_t maxCount,
+    const std::deque<std::vector<float>>& acceptRingSnap)
+{
+    if (maxCount == 0 || !_embedClient) return {};
+    auto queryVec = _embedClient->embed(contextText);
+    std::shared_ptr<std::vector<EmbeddingEntry>> index;
+    {
+        std::lock_guard<std::mutex> lk(_embedMutex);
+        _lastQueryEmbedding = queryVec;  // may be empty if embed failed
+        index = _embeddingIndex;
+    }
+    if (queryVec.empty() || !index || index->empty()) return {};
+    return scoreAndRankExemplars(*index, queryVec, acceptRingSnap, maxCount);
 }
 
 // ── Inference ─────────────────────────────────────────────────────────────────
@@ -425,6 +502,84 @@ void XTypeEngine::requestInference(
     }
     if (ov && ov->model.has_value() && !ov->model->empty())
         reqCfg.model = *ov->model;
+
+    // Build per-request embedding factory if the index is ready (L4).
+    // All state is snapshotted by value on the main thread; factory runs on worker thread.
+    std::function<std::string()> promptFactory;
+    {
+        size_t embedTargetCount = 0;
+        std::shared_ptr<std::vector<EmbeddingEntry>> indexSnap;
+        {
+            std::lock_guard<std::mutex> lk(_embedMutex);
+            indexSnap = _embeddingIndex;
+        }
+        if (_cfg.learning.enabled && _cfg.learning.include_examples_in_prompt
+            && _embedClient && indexSnap && !indexSnap->empty()) {
+            embedTargetCount = static_cast<size_t>(std::ceil(
+                static_cast<double>(StyleProfile::kMaxEmbedExemplars) *
+                std::clamp(_cfg.learning.voice_strength, 0, 100) / 100.0));
+        }
+        if (embedTargetCount > 0) {
+            auto acceptRingSnap = _acceptEmbedRing;  // copy on main thread
+
+            std::vector<std::string> staticExemplars;
+            if (_profile && !_profile->exemplars().empty()) {
+                const auto& all = _profile->exemplars();
+                size_t useCount = std::min(embedTargetCount, all.size());
+                staticExemplars = std::vector<std::string>(all.begin(), all.begin() + useCount);
+            }
+
+            // Build base PromptInputs; profile=nullptr avoids UAF if profile refreshes
+            // between factory creation (main thread) and factory execution (worker thread).
+            PromptInputs baseIn;
+            baseIn.base            = std::string(InferenceClient::base_system_prompt());
+            baseIn.profile         = nullptr;
+            baseIn.includeExamples = _cfg.learning.include_examples_in_prompt;
+            baseIn.userDescription = _cfg.user_prompt.description;
+            baseIn.avoidPhrases    = _cfg.user_prompt.avoid_phrases;
+            baseIn.budgetChars     = kPromptBudget;
+            if (_profile && !_profile->commonOpeners().empty())
+                baseIn.commonOpeners = _profile->commonOpeners();
+            if (!_cfg.user_prompt.tone.empty() && _cfg.user_prompt.tone != "default") {
+                static const std::unordered_map<std::string, const char*> kToneMap = {
+                    {"technical",    " Prefer precise technical terminology."},
+                    {"casual",       " Use a relaxed, conversational tone."},
+                    {"professional", " Use formal, professional language."},
+                    {"concise",      " Be brief and direct."},
+                };
+                auto it = kToneMap.find(_cfg.user_prompt.tone);
+                if (it != kToneMap.end()) baseIn.base += it->second;
+            }
+            if (!_lastProg.empty()) {
+                if (auto* appOv = currentAppOverride();
+                    appOv && appOv->prompt_addendum.has_value() && !appOv->prompt_addendum->empty())
+                    baseIn.base += "\n" + *appOv->prompt_addendum;
+            }
+            static constexpr size_t kMaxDescLen = 500;
+            if (baseIn.userDescription.size() > kMaxDescLen) {
+                size_t cut = baseIn.userDescription.rfind(' ', kMaxDescLen);
+                baseIn.userDescription.resize(cut != std::string::npos ? cut : kMaxDescLen);
+            }
+
+            std::string ctxForEmbed = ctx;  // copy before ctx is moved into request()
+            promptFactory = [this,
+                             ctxForEmbed     = std::move(ctxForEmbed),
+                             embedTargetCount,
+                             acceptRingSnap  = std::move(acceptRingSnap),
+                             staticExemplars = std::move(staticExemplars),
+                             baseIn          = std::move(baseIn)]() mutable -> std::string {
+                auto exemplars = retrieveExemplars(ctxForEmbed, embedTargetCount, acceptRingSnap);
+                PromptInputs in = std::move(baseIn);
+                if (!exemplars.empty())
+                    in.exemplarsOverride = std::move(exemplars);
+                else if (!staticExemplars.empty())
+                    in.exemplarsOverride = staticExemplars;
+                else
+                    in.includeExamples = false;
+                return buildSystemPrompt(in);
+            };
+        }
+    }
 
     dbg("requestInference ctx='%.40s...'", ctx.c_str());
     auto snapPtr = std::make_shared<std::string>(ctx);  // snapshot; shared ownership
@@ -538,7 +693,8 @@ void XTypeEngine::requestInference(
                     }
                 });
         },
-        [](std::string err) { dbg("inference error: %s", err.c_str()); }
+        [](std::string err) { dbg("inference error: %s", err.c_str()); },
+        std::move(promptFactory)
     );
 }
 
@@ -856,6 +1012,16 @@ void XTypeEngine::kickProfileLoad() {
         // Build embedding index on the background thread (blocking HTTP OK here).
         if (!indexPath.empty() && !ollamaHost.empty()) {
             sp.buildEmbeddingIndex(corpusPath, indexPath, ollamaHost);
+            // Hot-swap the index so per-request retrieval picks it up immediately.
+            auto newIndex = std::make_shared<std::vector<EmbeddingEntry>>(
+                readEmbeddingIndex(indexPath));
+            size_t idxCount = newIndex->size();
+            {
+                std::lock_guard<std::mutex> lk(_embedMutex);
+                _embeddingIndex = newIndex;
+            }
+            _instance->eventDispatcher().schedule(
+                [idxCount]{ dbg("[embed-index] loaded %zu entries", idxCount); });
         }
 
         size_t exCount = sp.exemplars().size();

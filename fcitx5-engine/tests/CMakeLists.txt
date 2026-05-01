@@ -73,6 +73,7 @@ target_link_libraries(test_phrase_blocklist PRIVATE
 catch_discover_tests(test_phrase_blocklist)
 
 add_executable(test_xtype_helpers test_xtype_helpers.cpp)
+target_include_directories(test_xtype_helpers PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../src)
 target_link_libraries(test_xtype_helpers PRIVATE
     Catch2::Catch2WithMain
 )
