@@ -1,7 +1,9 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstdio>
 #include <deque>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -207,4 +209,143 @@ TEST_CASE("accept ring fills and rolls at kAcceptRingSize", "[embed][L4]") {
     REQUIRE(ring.size() == kRingSize);
     REQUIRE(ring.front()[0] == 5.f);
     REQUIRE(ring.back()[0] == 24.f);
+}
+
+// ── accept_signals.json round-trip (mirrors XTypeEngine private methods) ──────
+
+static bool writeAcceptSignals(const std::deque<std::vector<float>>& ring,
+                                const std::string& path) {
+    if (path.empty() || ring.empty()) return false;
+    std::string tmp = path + ".tmp";
+    FILE* f = std::fopen(tmp.c_str(), "w");
+    if (!f) return false;
+    std::fprintf(f, "{\n  \"version\": 1,\n  \"saved_at\": 0,\n"
+                    "  \"accept_embeddings\": [\n");
+    bool firstVec = true;
+    for (const auto& vec : ring) {
+        if (!firstVec) std::fputs(",\n", f);
+        firstVec = false;
+        std::fputs("    [", f);
+        bool firstVal = true;
+        for (float v : vec) {
+            if (!firstVal) std::fputc(',', f);
+            firstVal = false;
+            std::fprintf(f, "%.7g", static_cast<double>(v));
+        }
+        std::fputs("]", f);
+    }
+    std::fputs("\n  ]\n}\n", f);
+    std::fclose(f);
+    return std::rename(tmp.c_str(), path.c_str()) == 0;
+}
+
+static std::deque<std::vector<float>> loadAcceptSignals(const std::string& path,
+                                                         size_t maxRing) {
+    std::ifstream in(path);
+    if (!in) return {};
+    std::string content((std::istreambuf_iterator<char>(in)),
+                         std::istreambuf_iterator<char>());
+
+    auto pos = content.find("\"accept_embeddings\"");
+    if (pos == std::string::npos) return {};
+    pos = content.find('[', pos);
+    if (pos == std::string::npos) return {};
+
+    std::deque<std::vector<float>> loaded;
+    size_t i = pos + 1;
+    size_t expectedDim = 0;
+
+    while (i < content.size()) {
+        while (i < content.size() && (std::isspace(static_cast<unsigned char>(content[i])) ||
+                                      content[i] == ',')) ++i;
+        if (i >= content.size() || content[i] == ']') break;
+        if (content[i] != '[') break;
+        ++i;
+
+        std::vector<float> vec;
+        while (i < content.size()) {
+            while (i < content.size() && (std::isspace(static_cast<unsigned char>(content[i])) ||
+                                          content[i] == ',')) ++i;
+            if (i >= content.size() || content[i] == ']') break;
+            const char* start = content.data() + i;
+            char* end;
+            float v = std::strtof(start, &end);
+            if (end == start) break;
+            vec.push_back(v);
+            i = static_cast<size_t>(end - content.data());
+        }
+        while (i < content.size() && content[i] != ']') ++i;
+        if (i < content.size()) ++i;
+
+        if (vec.empty()) continue;
+
+        if (expectedDim == 0) {
+            expectedDim = vec.size();
+        } else if (vec.size() != expectedDim) {
+            return {};  // dimension mismatch — discard
+        }
+
+        loaded.push_back(std::move(vec));
+    }
+
+    while (loaded.size() > maxRing) loaded.pop_front();
+    return loaded;
+}
+
+TEST_CASE("accept_signals: round-trip preserves all vectors", "[embed][accept_signals]") {
+    auto path = std::string(std::getenv("TMPDIR") ? std::getenv("TMPDIR") : "/tmp") +
+                "/xtype_test_accept_signals_rtrip.json";
+    std::deque<std::vector<float>> ring;
+    ring.push_back({0.1f, 0.2f, 0.3f});
+    ring.push_back({0.4f, 0.5f, 0.6f});
+    ring.push_back({-0.7f, 0.0f, 1.0f});
+
+    REQUIRE(writeAcceptSignals(ring, path));
+
+    auto loaded = loadAcceptSignals(path, 20);
+    REQUIRE(loaded.size() == 3);
+    for (size_t i = 0; i < 3; ++i) {
+        REQUIRE(loaded[i].size() == 3);
+        for (size_t d = 0; d < 3; ++d)
+            CHECK(std::fabs(loaded[i][d] - ring[i][d]) < 1e-5f);
+    }
+    std::remove(path.c_str());
+}
+
+TEST_CASE("accept_signals: missing file returns empty ring", "[embed][accept_signals]") {
+    auto loaded = loadAcceptSignals("/tmp/xtype_no_such_accept_signals.json", 20);
+    REQUIRE(loaded.empty());
+}
+
+TEST_CASE("accept_signals: mismatched dims discards entire file", "[embed][accept_signals]") {
+    auto path = std::string(std::getenv("TMPDIR") ? std::getenv("TMPDIR") : "/tmp") +
+                "/xtype_test_accept_signals_dim.json";
+    // Write raw JSON with conflicting dimensions manually.
+    {
+        std::ofstream f(path);
+        f << "{\n  \"version\": 1,\n  \"saved_at\": 0,\n"
+             "  \"accept_embeddings\": [\n"
+             "    [0.1,0.2,0.3],\n"   // dim 3
+             "    [0.4,0.5]\n"         // dim 2 — mismatch
+             "  ]\n}\n";
+    }
+    auto loaded = loadAcceptSignals(path, 20);
+    REQUIRE(loaded.empty());
+    std::remove(path.c_str());
+}
+
+TEST_CASE("accept_signals: ring on disk > maxRing is capped on load", "[embed][accept_signals]") {
+    auto path = std::string(std::getenv("TMPDIR") ? std::getenv("TMPDIR") : "/tmp") +
+                "/xtype_test_accept_signals_cap.json";
+    // Write 5 vectors to disk with maxRing=20, but load with maxRing=3.
+    std::deque<std::vector<float>> ring;
+    for (int i = 0; i < 5; ++i) ring.push_back({static_cast<float>(i), 0.f});
+    REQUIRE(writeAcceptSignals(ring, path));
+
+    auto loaded = loadAcceptSignals(path, 3);
+    REQUIRE(loaded.size() == 3);
+    // pop_front trims oldest; last 3 are indices 2,3,4
+    CHECK(loaded.front()[0] == 2.f);
+    CHECK(loaded.back()[0]  == 4.f);
+    std::remove(path.c_str());
 }

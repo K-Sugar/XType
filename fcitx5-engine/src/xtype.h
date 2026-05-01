@@ -72,6 +72,10 @@ private:
                                                size_t maxCount,
                                                const std::deque<std::vector<float>>& acceptRingSnap);
 
+    // Accept-signal persistence. Both run on the main thread only.
+    void writeAcceptSignals();   // atomically serialises _acceptEmbedRing to disk
+    void loadAcceptSignals();    // seeds _acceptEmbedRing from accept_signals.json
+
     fcitx::Instance                         *_instance;
     XTypeConfig                              _cfg;
     ContextBuffer                            _ctx;
@@ -102,6 +106,7 @@ private:
     std::string                              _corpusPathExpanded;
     std::string                              _profilePathExpanded;
     std::string                              _embeddingIndexPath;
+    std::string                              _acceptSignalsPath;
 
     // XTYPE_PROFILE_REFRESH_SEC overrides the profile refresh interval (clamped >= 30).
     int                                      _profileRefreshSec{300};

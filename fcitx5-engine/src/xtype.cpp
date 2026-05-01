@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <ctime>
 #include <filesystem>
+#include <fstream>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -109,8 +110,10 @@ XTypeEngine::XTypeEngine(fcitx::AddonManager *manager)
             _corpusPathExpanded  = cp.string();
             _profilePathExpanded = (cp.parent_path() / "style_profile.json").string();
             _embeddingIndexPath  = (cp.parent_path() / "corpus_embeddings.bin").string();
+            _acceptSignalsPath   = (cp.parent_path() / "accept_signals.json").string();
             kickProfileLoad();
             armProfileRefreshTimer();
+            loadAcceptSignals();
         }
     } else {
         dbg("[corpus] disabled (opt-in; edit config.h LearningConfig::enabled to enable)");
@@ -149,6 +152,9 @@ void XTypeEngine::reloadConfig() {
             _corpusPathExpanded  = cp.string();
             _profilePathExpanded = (cp.parent_path() / "style_profile.json").string();
             _embeddingIndexPath  = (cp.parent_path() / "corpus_embeddings.bin").string();
+            _acceptSignalsPath   = (cp.parent_path() / "accept_signals.json").string();
+            if (!learningWas)
+                loadAcceptSignals();  // user just enabled learning; seed ring from disk
         }
     }
 
@@ -260,6 +266,7 @@ void XTypeEngine::keyEvent(const fcitx::InputMethodEntry &,
             if (!lastEmbed.empty()) {
                 if (_acceptEmbedRing.size() >= kAcceptRingSize) _acceptEmbedRing.pop_front();
                 _acceptEmbedRing.push_back(std::move(lastEmbed));
+                writeAcceptSignals();
             }
         }
         ++_metrics.suggestions_accepted;
@@ -293,6 +300,7 @@ void XTypeEngine::keyEvent(const fcitx::InputMethodEntry &,
                 if (!lastEmbed.empty()) {
                     if (_acceptEmbedRing.size() >= kAcceptRingSize) _acceptEmbedRing.pop_front();
                     _acceptEmbedRing.push_back(std::move(lastEmbed));
+                    writeAcceptSignals();
                 }
             }
             ++_metrics.suggestions_accepted;
@@ -341,6 +349,7 @@ void XTypeEngine::keyEvent(const fcitx::InputMethodEntry &,
             if (!lastEmbed.empty()) {
                 if (_acceptEmbedRing.size() >= kAcceptRingSize) _acceptEmbedRing.pop_front();
                 _acceptEmbedRing.push_back(std::move(lastEmbed));
+                writeAcceptSignals();
             }
         }
         ++_metrics.suggestions_accepted;
@@ -894,6 +903,96 @@ void XTypeEngine::writeRecentEvents() {
         std::fclose(f);
         std::rename(tmp.c_str(), dst.c_str());
     }
+}
+
+// ── Accept signal persistence ─────────────────────────────────────────────────
+
+void XTypeEngine::writeAcceptSignals() {
+    if (_acceptSignalsPath.empty() || _acceptEmbedRing.empty()) return;
+
+    std::string tmp = _acceptSignalsPath + ".tmp";
+    FILE* f = std::fopen(tmp.c_str(), "w");
+    if (!f) return;
+
+    std::fprintf(f, "{\n  \"version\": 1,\n  \"saved_at\": %" PRId64 ",\n"
+                    "  \"accept_embeddings\": [\n",
+                 static_cast<int64_t>(std::time(nullptr)));
+
+    bool firstVec = true;
+    for (const auto& vec : _acceptEmbedRing) {
+        if (!firstVec) std::fputs(",\n", f);
+        firstVec = false;
+        std::fputs("    [", f);
+        bool firstVal = true;
+        for (float v : vec) {
+            if (!firstVal) std::fputc(',', f);
+            firstVal = false;
+            std::fprintf(f, "%.7g", static_cast<double>(v));
+        }
+        std::fputs("]", f);
+    }
+
+    std::fputs("\n  ]\n}\n", f);
+    std::fclose(f);
+    std::rename(tmp.c_str(), _acceptSignalsPath.c_str());
+}
+
+void XTypeEngine::loadAcceptSignals() {
+    if (_acceptSignalsPath.empty()) return;
+
+    std::ifstream in(_acceptSignalsPath);
+    if (!in) return;
+    std::string content((std::istreambuf_iterator<char>(in)),
+                         std::istreambuf_iterator<char>());
+
+    auto pos = content.find("\"accept_embeddings\"");
+    if (pos == std::string::npos) return;
+    pos = content.find('[', pos);
+    if (pos == std::string::npos) return;
+
+    std::deque<std::vector<float>> loaded;
+    size_t i = pos + 1;
+    size_t expectedDim = 0;
+
+    while (i < content.size()) {
+        while (i < content.size() && (std::isspace(static_cast<unsigned char>(content[i])) ||
+                                      content[i] == ',')) ++i;
+        if (i >= content.size() || content[i] == ']') break;  // end of outer array
+        if (content[i] != '[') break;                          // unexpected token
+        ++i;
+
+        std::vector<float> vec;
+        while (i < content.size()) {
+            while (i < content.size() && (std::isspace(static_cast<unsigned char>(content[i])) ||
+                                          content[i] == ',')) ++i;
+            if (i >= content.size() || content[i] == ']') break;
+            const char* start = content.data() + i;
+            char* end;
+            float v = std::strtof(start, &end);
+            if (end == start) break;  // no advance — parse error
+            vec.push_back(v);
+            i = static_cast<size_t>(end - content.data());
+        }
+        while (i < content.size() && content[i] != ']') ++i;  // skip to inner ']'
+        if (i < content.size()) ++i;
+
+        if (vec.empty()) continue;
+
+        if (expectedDim == 0) {
+            expectedDim = vec.size();
+        } else if (vec.size() != expectedDim) {
+            // Dimension mismatch — embedding model likely changed; discard entire file.
+            dbg("[accept_signals] dim mismatch (%zu vs %zu) — discarding", vec.size(), expectedDim);
+            return;
+        }
+
+        loaded.push_back(std::move(vec));
+    }
+
+    while (loaded.size() > kAcceptRingSize) loaded.pop_front();
+    _acceptEmbedRing = std::move(loaded);
+    dbg("[accept_signals] loaded %zu embeddings (dim=%zu)",
+        _acceptEmbedRing.size(), expectedDim);
 }
 
 // ── Personalization (Session 17) ──────────────────────────────────────────────
