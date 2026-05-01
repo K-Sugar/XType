@@ -36,6 +36,21 @@ bool hasAlpha(const std::string& s) {
     return false;
 }
 
+// Returns true if any character repeats 6+ consecutive times.
+// Rejects held-key game input (e.g. "wwwwwwww" from WASD movement).
+bool hasLongKeyRepeat(const std::string& s) {
+    if (s.size() < 6) return false;
+    int run = 1;
+    for (size_t i = 1; i < s.size(); ++i) {
+        if (s[i] == s[i - 1]) {
+            if (++run >= 6) return true;
+        } else {
+            run = 1;
+        }
+    }
+    return false;
+}
+
 std::string trim(std::string s) {
     while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front()))) s.erase(0, 1);
     while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back())))  s.pop_back();
@@ -444,6 +459,7 @@ bool CorpusCollector::acceptable(const std::string& text) const {
     if (text.empty()) return false;
     if (static_cast<int>(text.size()) < _cfg.min_sentence_chars) return false;
     if (!hasAlpha(text)) return false;
+    if (hasLongKeyRepeat(text)) return false;
     if (hasCodeShape(text)) return false;
     if (hasPrivateTerm(text)) return false;
     return true;

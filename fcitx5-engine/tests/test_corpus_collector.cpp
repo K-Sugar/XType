@@ -579,6 +579,50 @@ TEST_CASE("rotation writes corpus_seed.json before rename", "[corpus][l5][rotati
     fs::remove_all(dir);
 }
 
+// ── key-repeat filter ────────────────────────────────────────────────────────
+
+TEST_CASE("key-repeat filter rejects run of 6+ identical chars", "[corpus][filter][keyrepeat]") {
+    auto p = makeTempCorpusPath("keyrepeat_reject");
+    {
+        CorpusCollector c(makeCfg(p));
+        // Simulated WASD game input — long held-key run
+        c.record("wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww");
+        c.record("aaaaaaaassssssssddddddddwwwwwwww");
+        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+    }
+    auto contents = readAll(p);
+    REQUIRE(contents.find("wwwwwwww") == std::string::npos);
+    REQUIRE(contents.find("aaaaaaaassssssss") == std::string::npos);
+    fs::remove_all(p.parent_path());
+}
+
+TEST_CASE("key-repeat filter accepts run of 5 identical chars (threshold not crossed)", "[corpus][filter][keyrepeat]") {
+    auto p = makeTempCorpusPath("keyrepeat_accept");
+    {
+        CorpusCollector c(makeCfg(p));
+        // "Shhhhhh" has a run of 6 h's — but let's use exactly 5 consecutive identical
+        // chars embedded in normal prose to stay below the threshold.
+        c.record("That is really reallly interesting to know");
+        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+    }
+    auto contents = readAll(p);
+    REQUIRE(contents.find("really reallly interesting") != std::string::npos);
+    fs::remove_all(p.parent_path());
+}
+
+TEST_CASE("key-repeat filter rejects when run appears mid-string", "[corpus][filter][keyrepeat]") {
+    auto p = makeTempCorpusPath("keyrepeat_mid");
+    {
+        CorpusCollector c(makeCfg(p));
+        // Long run embedded between normal words
+        c.record("hello wwwwwwww world");
+        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+    }
+    auto contents = readAll(p);
+    REQUIRE(contents.find("hello wwwwwwww world") == std::string::npos);
+    fs::remove_all(p.parent_path());
+}
+
 // ── L6: per-app tagged write format ─────────────────────────────────────────
 
 TEST_CASE("record with app writes tagged format; record without app writes plain", "[corpus][l6][write]") {
