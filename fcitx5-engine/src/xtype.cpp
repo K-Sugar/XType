@@ -120,6 +120,7 @@ XTypeEngine::XTypeEngine(fcitx::AddonManager *manager)
         if (!cp.empty() && cp.string().front() != '~') {
             _corpusPathExpanded  = cp.string();
             _profilePathExpanded = (cp.parent_path() / "style_profile.json").string();
+            _embeddingIndexPath  = (cp.parent_path() / "corpus_embeddings.bin").string();
             kickProfileLoad();
             armProfileRefreshTimer();
         }
@@ -159,6 +160,7 @@ void XTypeEngine::reloadConfig() {
         if (!cp.empty() && cp.string().front() != '~') {
             _corpusPathExpanded  = cp.string();
             _profilePathExpanded = (cp.parent_path() / "style_profile.json").string();
+            _embeddingIndexPath  = (cp.parent_path() / "corpus_embeddings.bin").string();
         }
     }
 
@@ -764,17 +766,22 @@ void XTypeEngine::applyPrompt() {
         log_warn("user description truncated to fit prompt budget");
     }
 
-    // voice_strength: 0 = no exemplars, 100 = all, 1–99 = proportional slice.
+    // voice_strength: 0 = no exemplars, 100 = kMaxEmbedExemplars, 1–99 = proportional.
     if (_profile && !_profile->exemplars().empty() && in.includeExamples) {
         const auto& all = _profile->exemplars();
-        size_t count = static_cast<size_t>(
-            std::ceil(all.size() * std::clamp(_cfg.learning.voice_strength, 0, 100) / 100.0));
-        if (count == 0) {
+        size_t targetCount = static_cast<size_t>(
+            std::ceil(static_cast<double>(StyleProfile::kMaxEmbedExemplars) *
+                      std::clamp(_cfg.learning.voice_strength, 0, 100) / 100.0));
+        if (targetCount == 0) {
             in.includeExamples = false;
-        } else if (count < all.size()) {
-            in.exemplarsOverride = std::vector<std::string>(all.begin(), all.begin() + count);
+        } else {
+            size_t useCount = std::min(targetCount, all.size());
+            if (useCount < all.size()) {
+                in.exemplarsOverride =
+                    std::vector<std::string>(all.begin(), all.begin() + useCount);
+            }
+            // useCount == all.size(): use default path (exemplarsOverride empty)
         }
-        // count == all.size(): use default path (exemplarsOverride empty)
     }
 
     // Tone: append a short style modifier when a non-default tone is set.
@@ -824,8 +831,10 @@ void XTypeEngine::kickProfileLoad() {
 
     std::string corpusPath  = _corpusPathExpanded;
     std::string profilePath = _profilePathExpanded;
+    std::string indexPath   = _embeddingIndexPath;
+    std::string ollamaHost  = _cfg.inference.ollama_host;
 
-    _profileWorker.emplace([this, corpusPath, profilePath]() {
+    _profileWorker.emplace([this, corpusPath, profilePath, indexPath, ollamaHost]() {
         StyleProfile sp = StyleProfile::deserialize(profilePath);
         bool stale = StyleProfile::isStale(corpusPath, profilePath);
         bool needRebuild = sp.exemplars().empty() || stale;
@@ -842,6 +851,11 @@ void XTypeEngine::kickProfileLoad() {
                 _instance->eventDispatcher().schedule(
                     [path = profilePath]{ dbg("[profile] serialize: %s", path.c_str()); });
             }
+        }
+
+        // Build embedding index on the background thread (blocking HTTP OK here).
+        if (!indexPath.empty() && !ollamaHost.empty()) {
+            sp.buildEmbeddingIndex(corpusPath, indexPath, ollamaHost);
         }
 
         size_t exCount = sp.exemplars().size();

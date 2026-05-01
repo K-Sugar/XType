@@ -11,8 +11,10 @@ catch_discover_tests(test_context_buffer)
 add_executable(test_corpus_collector test_corpus_collector.cpp)
 target_link_libraries(test_corpus_collector PRIVATE
     corpus_collector_obj
+    embed_client_obj
     style_profile_obj
     path_utils_obj
+    CURL::libcurl
     Catch2::Catch2WithMain
 )
 
@@ -20,8 +22,10 @@ catch_discover_tests(test_corpus_collector)
 
 add_executable(test_style_profile test_style_profile.cpp)
 target_link_libraries(test_style_profile PRIVATE
+    embed_client_obj
     style_profile_obj
     path_utils_obj
+    CURL::libcurl
     Catch2::Catch2WithMain
 )
 
@@ -30,12 +34,25 @@ catch_discover_tests(test_style_profile)
 add_executable(test_prompt_builder test_prompt_builder.cpp)
 target_link_libraries(test_prompt_builder PRIVATE
     prompt_builder_obj
+    embed_client_obj
     style_profile_obj
     path_utils_obj
+    CURL::libcurl
     Catch2::Catch2WithMain
 )
 
 catch_discover_tests(test_prompt_builder)
+
+add_executable(test_embed_client test_embed_client.cpp)
+target_link_libraries(test_embed_client PRIVATE
+    embed_client_obj
+    style_profile_obj
+    path_utils_obj
+    CURL::libcurl
+    Catch2::Catch2WithMain
+)
+
+catch_discover_tests(test_embed_client)
 
 add_executable(test_config_loader test_config_loader.cpp)
 target_link_libraries(test_config_loader PRIVATE

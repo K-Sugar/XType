@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -394,4 +395,54 @@ TEST_CASE("tail-read loads exemplars from corpus tail not head", "[style][recenc
         REQUIRE(e.find("fresh") != std::string::npos);
     }
     fs::remove_all(d);
+}
+
+// ── embedding index (L3) ──────────────────────────────────────────────────────
+
+TEST_CASE("writeEmbeddingIndex / readEmbeddingIndex round-trip", "[embed][roundtrip]") {
+    auto d = uniqueDir("embed_rt");
+    auto p = (d / "corpus_embeddings.bin").string();
+
+    std::vector<EmbeddingEntry> entries = {
+        {"hello world",    {0.1f, 0.2f, 0.3f}},
+        {"foo bar baz",    {0.4f, 0.5f, 0.6f}},
+        {"test sentence",  {-0.1f, 1.0f, 0.9f}},
+    };
+
+    REQUIRE(writeEmbeddingIndex(p, entries));
+
+    auto read = readEmbeddingIndex(p);
+    REQUIRE(read.size() == 3);
+    for (size_t i = 0; i < entries.size(); ++i) {
+        REQUIRE(read[i].text == entries[i].text);
+        REQUIRE(read[i].embedding.size() == entries[i].embedding.size());
+        for (size_t j = 0; j < entries[i].embedding.size(); ++j) {
+            REQUIRE(std::abs(read[i].embedding[j] - entries[i].embedding[j]) < 1e-6f);
+        }
+    }
+    fs::remove_all(d);
+}
+
+TEST_CASE("readEmbeddingIndex returns empty for missing file", "[embed][roundtrip]") {
+    auto d = uniqueDir("embed_miss");
+    auto result = readEmbeddingIndex((d / "missing.bin").string());
+    REQUIRE(result.empty());
+    fs::remove_all(d);
+}
+
+// ── voice_strength formula (L3) ───────────────────────────────────────────────
+
+TEST_CASE("voice_strength 0 produces targetCount 0", "[style][voice]") {
+    size_t targetCount = static_cast<size_t>(
+        std::ceil(static_cast<double>(StyleProfile::kMaxEmbedExemplars) * 0 / 100.0));
+    REQUIRE(targetCount == 0);
+    // No exemplars → preamble is empty (fallback behaviour when targetCount == 0)
+    StyleProfile sp;
+    REQUIRE(sp.generatePreamble().empty());
+}
+
+TEST_CASE("voice_strength 50 produces targetCount 10", "[style][voice]") {
+    size_t targetCount = static_cast<size_t>(
+        std::ceil(static_cast<double>(StyleProfile::kMaxEmbedExemplars) * 50.0 / 100.0));
+    REQUIRE(targetCount == 10);
 }

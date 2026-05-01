@@ -83,6 +83,7 @@ private:
     std::atomic<bool>                        _profileLoading{false};
     std::string                              _corpusPathExpanded;
     std::string                              _profilePathExpanded;
+    std::string                              _embeddingIndexPath;
 
     // Observability (Session 17.5). _debugVerbose is set once at engine load
     // from XTYPE_DEBUG_VERBOSE env or the sentinel file

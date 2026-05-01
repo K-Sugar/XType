@@ -27,6 +27,12 @@ add_library(corpus_collector_obj OBJECT src/corpus_collector.cpp)
 target_include_directories(corpus_collector_obj PUBLIC src)
 set_target_properties(corpus_collector_obj PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
+# embed_client — blocking Ollama /api/embed (libcurl); reused by style_profile and tests
+add_library(embed_client_obj OBJECT src/embed_client.cpp)
+target_include_directories(embed_client_obj PUBLIC src)
+target_link_libraries(embed_client_obj PRIVATE CURL::libcurl)
+set_target_properties(embed_client_obj PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 # style_profile compiled once; consumed by the addon and tests
 add_library(style_profile_obj OBJECT src/style_profile.cpp)
 target_include_directories(style_profile_obj PUBLIC src)
@@ -50,6 +56,7 @@ target_link_libraries(xtype-fcitx5 PRIVATE
     context_buffer_obj
     path_utils_obj
     corpus_collector_obj
+    embed_client_obj
     style_profile_obj
     prompt_builder_obj
     config_loader_obj

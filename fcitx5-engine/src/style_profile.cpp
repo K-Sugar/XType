@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cstdint>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <map>
@@ -14,17 +16,20 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "embed_client.h"
 #include "path_utils.h"
 
 namespace {
 
-constexpr size_t      kMaxScannedSentences = 1000;
-constexpr int         kMinSentenceChars    = 12;
-constexpr int         kBucketShortMax      = 49;   // [12, 49]
-constexpr int         kBucketMediumMax     = 100;  // [50, 100], long is [101, ∞)
-constexpr int         kMaxStaleScanBytes   = 5 * 1024 * 1024;
-constexpr int         kProfileSchemaVer    = 1;
-constexpr std::streamsize kTailScanBytes   = 256 * 1024; // 256 KB
+constexpr size_t      kMaxScannedSentences  = 1000;
+constexpr int         kMinSentenceChars     = 12;
+constexpr int         kBucketShortMax       = 49;   // [12, 49]
+constexpr int         kBucketMediumMax      = 100;  // [50, 100], long is [101, ∞)
+constexpr int         kMaxStaleScanBytes    = 5 * 1024 * 1024;
+constexpr int         kProfileSchemaVer     = 1;
+constexpr std::streamsize kTailScanBytes    = 256 * 1024; // 256 KB
+constexpr size_t      kMaxIndexedSentences  = 2000;
+constexpr size_t      kEmbedBatchSize       = 100;
 
 // ── small utils ──────────────────────────────────────────────────────────────
 
@@ -543,4 +548,159 @@ bool StyleProfile::isStale(const std::string& corpus_path,
         }
     }
     return false;
+}
+
+// ── Embedding index ───────────────────────────────────────────────────────────
+
+bool writeEmbeddingIndex(const std::string& path,
+                         const std::vector<EmbeddingEntry>& entries) {
+    if (entries.empty()) return false;
+
+    const uint32_t dim   = static_cast<uint32_t>(entries[0].embedding.size());
+    const uint32_t count = static_cast<uint32_t>(entries.size());
+    const int64_t  ts    = static_cast<int64_t>(std::time(nullptr));
+
+    std::string tmp = path + ".tmp";
+    std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+    if (!out) return false;
+
+    // Header: magic 'XTES' (4 bytes), version, dim, count, created_at
+    const char magic[4] = {'X', 'T', 'E', 'S'};
+    out.write(magic, 4);
+    uint32_t version = 1;
+    out.write(reinterpret_cast<const char*>(&version), 4);
+    out.write(reinterpret_cast<const char*>(&dim),     4);
+    out.write(reinterpret_cast<const char*>(&count),   4);
+    out.write(reinterpret_cast<const char*>(&ts),      8);
+
+    for (const auto& e : entries) {
+        if (e.embedding.size() != dim) continue;  // skip dimension mismatch
+        uint32_t tlen = static_cast<uint32_t>(e.text.size());
+        out.write(reinterpret_cast<const char*>(&tlen), 4);
+        out.write(e.text.data(), static_cast<std::streamsize>(tlen));
+        out.write(reinterpret_cast<const char*>(e.embedding.data()),
+                  static_cast<std::streamsize>(dim * sizeof(float)));
+    }
+
+    if (!out) {
+        std::error_code ec;
+        std::filesystem::remove(tmp, ec);
+        return false;
+    }
+    out.close();
+
+    std::error_code ec;
+    std::filesystem::rename(tmp, path, ec);
+    if (ec) {
+        std::filesystem::remove(tmp, ec);
+        return false;
+    }
+    return true;
+}
+
+std::vector<EmbeddingEntry> readEmbeddingIndex(const std::string& path) {
+    std::vector<EmbeddingEntry> result;
+    std::ifstream in(path, std::ios::binary);
+    if (!in) return result;
+
+    char magic[4];
+    in.read(magic, 4);
+    if (!in || magic[0] != 'X' || magic[1] != 'T' || magic[2] != 'E' || magic[3] != 'S')
+        return result;
+
+    uint32_t version = 0, dim = 0, count = 0;
+    int64_t  ts = 0;
+    in.read(reinterpret_cast<char*>(&version), 4);
+    in.read(reinterpret_cast<char*>(&dim),     4);
+    in.read(reinterpret_cast<char*>(&count),   4);
+    in.read(reinterpret_cast<char*>(&ts),      8);
+    if (!in || version != 1 || dim == 0 || dim > 16384 || count == 0) return result;
+
+    result.reserve(count);
+    for (uint32_t i = 0; i < count; ++i) {
+        uint32_t tlen = 0;
+        in.read(reinterpret_cast<char*>(&tlen), 4);
+        if (!in || tlen > 65536) return result;
+
+        std::string text(tlen, '\0');
+        in.read(text.data(), static_cast<std::streamsize>(tlen));
+        if (!in) return result;
+
+        std::vector<float> emb(dim);
+        in.read(reinterpret_cast<char*>(emb.data()),
+                static_cast<std::streamsize>(dim * sizeof(float)));
+        if (!in) return result;
+
+        result.push_back({std::move(text), std::move(emb)});
+    }
+    return result;
+}
+
+void StyleProfile::buildEmbeddingIndex(const std::string& corpusPath,
+                                       const std::string& indexPath,
+                                       const std::string& ollamaHost) {
+    namespace fs = std::filesystem;
+    std::error_code ec;
+
+    auto corpusP = path_utils::expandTilde(corpusPath);
+    auto indexP  = fs::path(indexPath);
+
+    // Skip rebuild when index is at least as fresh as the corpus.
+    if (fs::exists(indexP, ec) && !ec && fs::exists(corpusP, ec) && !ec) {
+        auto idxMtime = fs::last_write_time(indexP, ec);
+        if (!ec) {
+            auto cpMtime = fs::last_write_time(corpusP, ec);
+            if (!ec && idxMtime >= cpMtime) return;
+        }
+    }
+
+    // Read corpus tail sentences (same window as loadFromCorpus).
+    std::vector<std::string> sentences;
+    {
+        std::ifstream in(corpusP, std::ios::binary | std::ios::ate);
+        if (!in) return;
+
+        const auto fileSize = static_cast<std::streamsize>(in.tellg());
+        const auto seekPos  = std::max(std::streamsize{0}, fileSize - kTailScanBytes);
+        in.seekg(seekPos);
+        if (seekPos > 0) {
+            std::string discard;
+            std::getline(in, discard);
+        }
+
+        std::string line;
+        while (std::getline(in, line) && sentences.size() < kMaxIndexedSentences) {
+            appendSentencesFromLine(line, sentences);
+        }
+    }
+
+    if (sentences.empty()) return;
+
+    // Dedup (same invariant as loadFromCorpus L2 deduplication).
+    std::vector<std::string> unique;
+    std::unordered_set<std::string> seen;
+    for (const auto& s : sentences) {
+        if (seen.insert(s).second) unique.push_back(s);
+    }
+
+    // Embed in chunks to avoid oversized JSON payloads.
+    OllamaEmbedClient client(ollamaHost);
+    std::vector<EmbeddingEntry> entries;
+    entries.reserve(unique.size());
+
+    for (size_t i = 0; i < unique.size(); i += kEmbedBatchSize) {
+        size_t end = std::min(i + kEmbedBatchSize, unique.size());
+        std::vector<std::string> batch(unique.begin() + static_cast<std::ptrdiff_t>(i),
+                                       unique.begin() + static_cast<std::ptrdiff_t>(end));
+        auto vecs = client.embedBatch(batch);
+        for (size_t j = 0; j < batch.size(); ++j) {
+            if (j < vecs.size() && !vecs[j].empty()) {
+                entries.push_back({batch[j], std::move(vecs[j])});
+            }
+        }
+    }
+
+    if (!entries.empty()) {
+        writeEmbeddingIndex(indexPath, entries);
+    }
 }

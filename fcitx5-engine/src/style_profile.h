@@ -21,6 +21,23 @@
 #include <string>
 #include <vector>
 
+// ── Embedding index ───────────────────────────────────────────────────────────
+
+struct EmbeddingEntry {
+    std::string        text;
+    std::vector<float> embedding;
+};
+
+// Write corpus_embeddings.bin atomically (.tmp → rename).
+// Returns false on I/O error. All entries must have the same embedding size.
+bool writeEmbeddingIndex(const std::string& path,
+                         const std::vector<EmbeddingEntry>& entries);
+
+// Read corpus_embeddings.bin. Returns empty vector on missing or corrupt file.
+std::vector<EmbeddingEntry> readEmbeddingIndex(const std::string& path);
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 class StyleProfile {
 public:
     StyleProfile() = default;
@@ -45,6 +62,16 @@ public:
                         const std::string& profile_path,
                         int new_lines_threshold = 200,
                         int min_age_seconds     = 30 * 60);
+
+    // voice_strength 0–100 maps to 0–kMaxEmbedExemplars retrieved sentences.
+    static constexpr size_t kMaxEmbedExemplars = 20;
+
+    // Build or refresh corpus_embeddings.bin on the background profile thread.
+    // Freshness-checks the index against the corpus before embedding.
+    // Blocking HTTP — must only be called from the profile worker std::thread.
+    void buildEmbeddingIndex(const std::string& corpusPath,
+                             const std::string& indexPath,
+                             const std::string& ollamaHost);
 
     // Accessors (also used by tests).
     const std::vector<std::string>& exemplars()      const { return _exemplars; }
