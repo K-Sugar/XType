@@ -351,13 +351,21 @@ void XTypeEngine::keyEvent(const fcitx::InputMethodEntry &,
         return;
     }
 
-    // Printable ASCII (space through ~). Pass key through to app, update buffer,
-    // arm debounce timer for inference.
+    // Printable ASCII (space through ~). Update buffer and arm debounce timer for
+    // inference. When ghost text is active we cannot let the key pass through: the
+    // app may still be in preedit mode when the forwarded key arrives (text-input-v3
+    // does not guarantee the preedit-clear commit() lands before the forwarded key),
+    // causing the keypress to be silently dropped. Instead, commit the char via the
+    // same protocol transaction that clears the preedit, then consume the event.
     if (sym >= FcitxKey_space && sym <= FcitxKey_asciitilde) {
         dbg("key prog=%s ctx_len=%zu", ic->program().c_str(), _ctx.contextText().size());
+        const char ch = static_cast<char>(sym);
+        if (hasSuggestion) {
+            ic->commitString(std::string(1, ch));
+            event.filterAndAccept();
+        }
         invalidate();
         updatePreedit(ic);
-        const char ch = static_cast<char>(sym);
         _ctx.appendChar(ch);
 
         // User-typed-only buffer for corpus harvest (excludes AI accept paths).
