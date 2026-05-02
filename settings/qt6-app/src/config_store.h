@@ -146,6 +146,7 @@ signals:
     void saved();              // atomic TOML write succeeded
     void saveFailed(QString reason);
     void resetDone(QString backupPath);  // emitted after resetAll completes
+    void parseError(const QString& message);
 
     // Per-property signals
     void engineEnabledChanged();

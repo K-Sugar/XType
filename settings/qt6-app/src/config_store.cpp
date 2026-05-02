@@ -55,8 +55,9 @@ void ConfigStore::load() {
 
     auto result = toml::parse_file(_configPath.toStdString());
     if (!result) {
-        qWarning() << "ConfigStore: failed to parse" << _configPath
-                   << QString::fromStdString(std::string(result.error().description()));
+        QString msg = QString::fromStdString(std::string(result.error().description()));
+        qWarning() << "ConfigStore: failed to parse" << _configPath << msg;
+        emit parseError(msg);
         return;
     }
     const toml::table &root = result.table();

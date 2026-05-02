@@ -14,6 +14,7 @@ Window {
     title: "XType Settings"
 
     property string currentPage: "general"
+    property string configParseError: ""
 
     Rectangle {
         id: windowBg
@@ -106,6 +107,61 @@ Window {
                 Component.onCompleted: {
                     pageLoader.source = contentArea.pageSource(window.currentPage)
                     contentArea._loadedPage = window.currentPage
+                }
+            }
+        }
+
+        Connections {
+            target: Config
+            function onParseError(msg) { configParseError = msg }
+        }
+
+        // Parse error banner — fixed at top of content area when config.toml is malformed
+        Rectangle {
+            id: parseErrorBanner
+            anchors { left: parent.left; right: parent.right; top: titlebar.bottom; leftMargin: 1; rightMargin: 1 }
+            height: 44
+            visible: configParseError !== ""
+            color: Qt.rgba(0.72, 0.10, 0.10, 0.22)
+            border.width: 1
+            border.color: Qt.rgba(1.0, 0.37, 0.37, 0.40)
+            z: 2
+            clip: true
+
+            Row {
+                anchors.centerIn: parent
+                spacing: 12
+
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: configParseError.length > 120
+                          ? configParseError.substring(0, 120) + "…"
+                          : configParseError
+                    font.family: Theme.sansFamily; font.pixelSize: 12
+                    color: "#ff8a8a"
+                    renderType: Text.NativeRendering
+                }
+
+                Rectangle {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: dismissLabel.implicitWidth + 20; height: 26; radius: 5
+                    color: Qt.rgba(0.72, 0.10, 0.10, 0.18)
+                    border.width: 1; border.color: Qt.rgba(1.0, 0.37, 0.37, 0.40)
+
+                    Text {
+                        id: dismissLabel
+                        anchors.centerIn: parent
+                        text: "Dismiss"
+                        font.family: Theme.sansFamily; font.pixelSize: 11
+                        color: "#ff8a8a"
+                        renderType: Text.NativeRendering
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: configParseError = ""
+                    }
                 }
             }
         }

@@ -262,6 +262,33 @@ TEST_CASE("apps: per-app model round-trips via setApp and survives reload", "[co
     CHECK(!kate.contains("model"));
 }
 
+// ------------------------------------------------------------------ 10
+TEST_CASE("parse error emits parseError signal for malformed TOML", "[config_store]") {
+    QTemporaryDir tmp; REQUIRE(tmp.isValid());
+    const QString malformedPath = tmp.filePath("config.toml");
+
+    {
+        QFile f(malformedPath);
+        REQUIRE(f.open(QIODevice::WriteOnly | QIODevice::Text));
+        f.write("model = [unclosed\n");
+    }
+
+    ConfigStore cs(malformedPath);
+
+    int emitCount = 0;
+    QString capturedMsg;
+    QObject::connect(&cs, &ConfigStore::parseError, [&](const QString &msg) {
+        ++emitCount;
+        capturedMsg = msg;
+    });
+
+    cs.load();
+
+    REQUIRE(emitCount == 1);
+    CHECK(!capturedMsg.isEmpty());
+    CHECK(!capturedMsg.contains(malformedPath));
+}
+
 // ------------------------------------------------------------------ 9
 TEST_CASE("resetAll: backup file exists, main file reverts to defaults", "[config_store]") {
     QTemporaryDir tmp; REQUIRE(tmp.isValid());
