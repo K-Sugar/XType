@@ -53,13 +53,43 @@ Item {
                 }
                 XRow {
                     label: "Max suggestion length"
-                    isLast: true
                     width: parent.width
                     XSlider {
                         min: 4; max: 48; step: 1
                         value: Config.numPredict
                         onCommitted: (v) => Config.numPredict = v
                         width: 200
+                    }
+                }
+                XRow {
+                    label: "Trigger mode"
+                    desc: "Auto fires after a pause; Manual fires on trigger key"
+                    width: parent.width
+                    Row {
+                        spacing: 6
+                        XPill {
+                            label: "Auto"
+                            on: Config.triggerMode === "pause"
+                            onClicked: Config.triggerMode = "pause"
+                        }
+                        XPill {
+                            label: "Manual"
+                            on: Config.triggerMode === "manual"
+                            onClicked: Config.triggerMode = "manual"
+                        }
+                    }
+                }
+                XRow {
+                    label: "Trigger key"
+                    desc: "Key combo to fire inference (e.g. ctrl+space)"
+                    isLast: true
+                    visible: Config.triggerMode === "manual"
+                    width: parent.width
+                    XInput {
+                        placeholderText: "e.g. ctrl+space"
+                        text: Config.triggerKey
+                        onEditingFinished: Config.triggerKey = text
+                        maximumLength: 50
                     }
                 }
             }
@@ -96,19 +126,11 @@ Item {
                 XRow {
                     label: "Partial accept (word-by-word)"
                     desc: "Accept one word at a time"
+                    isLast: true
                     width: parent.width
                     XToggle {
                         on: Config.partialAccept
                         onToggled: (v) => Config.partialAccept = v
-                    }
-                }
-                XRow {
-                    label: "Dismiss on Esc"
-                    isLast: true
-                    width: parent.width
-                    XToggle {
-                        on: Config.escDismisses
-                        onToggled: (v) => Config.escDismisses = v
                     }
                 }
             }

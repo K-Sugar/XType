@@ -25,10 +25,9 @@ struct InferenceConfig {
 struct BehaviourConfig {
     bool                     engine_enabled       = true;
     TriggerMode              trigger_mode         = TriggerMode::Pause;
+    std::string              trigger_key          = "ctrl+space";
     AcceptKey                accept_full_key      = AcceptKey::Tab;
     bool                     partial_accept       = true;   // renamed from tab_accepts_word
-    bool                     esc_dismisses        = true;
-    bool                     passthrough_terminals= true;
     std::vector<std::string> blocklist_apps       = {
         "konsole", "alacritty",
         "keepassxc", "1password", "bitwarden", "gnome-keyring", "seahorse"

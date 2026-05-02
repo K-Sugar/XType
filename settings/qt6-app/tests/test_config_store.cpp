@@ -47,10 +47,9 @@ TEST_CASE("load config_default.toml yields XTypeConfig defaults", "[config_store
 
     CHECK(cs.engineEnabled()           == true);
     CHECK(cs.triggerMode()             == "pause");
+    CHECK(cs.triggerKey()              == "ctrl+space");
     CHECK(cs.acceptKey()               == "tab");
     CHECK(cs.partialAccept()           == true);
-    CHECK(cs.escDismisses()            == true);
-    CHECK(cs.passThroughTerminals()    == true);
     CHECK(cs.blocklistApps()           == QStringList({"konsole","alacritty","keepassxc","1password","bitwarden","gnome-keyring","seahorse"}));
     CHECK(cs.blockedPhrases()          == QStringList{});
 

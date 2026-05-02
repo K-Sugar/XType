@@ -13,10 +13,9 @@ threads = 4
 [behaviour]
 engine_enabled = false
 trigger_mode = "manual"
+trigger_key = "ctrl+enter"
 accept_full_key = "enter"
 partial_accept = false
-esc_dismisses = false
-passthrough_terminals = false
 blocklist_apps = ["kate", "subl"]
 blocked_phrases = ["pursuant to", "hereinafter"]
 

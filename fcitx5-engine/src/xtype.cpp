@@ -55,6 +55,39 @@ static void log_warn(const char *msg) {
     dbg("WARN: %s", msg);
 }
 
+// Returns true when `event` matches the trigger key spec (e.g. "ctrl+space").
+// Modifiers: ctrl/control, shift, alt, super (case-insensitive).
+// Key name: anything fcitx::Key::keySymFromString() recognises (e.g. "space").
+static bool isTriggerKey(const fcitx::KeyEvent& event, const std::string& spec) {
+    if (spec.empty()) return false;
+
+    std::string lower = spec;
+    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+
+    fcitx::KeyStates wantStates;
+    std::string keyName;
+    size_t pos = 0;
+    while (true) {
+        size_t sep = lower.find('+', pos);
+        std::string part = (sep == std::string::npos)
+            ? lower.substr(pos)
+            : lower.substr(pos, sep - pos);
+        if (sep == std::string::npos) { keyName = part; break; }
+
+        if (part == "ctrl"  || part == "control") wantStates |= fcitx::KeyState::Ctrl;
+        else if (part == "shift")                 wantStates |= fcitx::KeyState::Shift;
+        else if (part == "alt")                   wantStates |= fcitx::KeyState::Alt;
+        else if (part == "super" || part == "mod4") wantStates |= fcitx::KeyState::Super;
+
+        pos = sep + 1;
+    }
+
+    if (keyName.empty()) return false;
+    auto sym = fcitx::Key::keySymFromString(keyName);
+    if (sym == FcitxKey_None) return false;
+    return event.key().check(fcitx::Key(sym, wantStates));
+}
+
 // ── XTypeEngine ───────────────────────────────────────────────────────────────
 
 XTypeEngine::XTypeEngine(fcitx::AddonManager *manager)
@@ -239,8 +272,18 @@ void XTypeEngine::keyEvent(const fcitx::InputMethodEntry &,
     if (auto* ov = currentAppOverride(); ov && ov->enabled.has_value() && !*ov->enabled)
         return;
 
-    // Phrase blocklist stub (always false until future session implements matching).
+    // Phrase blocklist: pass key through without buffering or inference.
     if (_phraseBlock.matches(_ctx.contextText())) return;
+
+    // Manual trigger mode: consume the trigger key and fire inference immediately.
+    if (_cfg.behaviour.trigger_mode == TriggerMode::Manual) {
+        if (isTriggerKey(event, _cfg.behaviour.trigger_key)) {
+            event.filterAndAccept();
+            _debounceTimer.reset();
+            requestInference(ic->watch(), ic);
+            return;
+        }
+    }
 
     // Modifier combos (Ctrl / Alt / Super) pass through.
     auto states = event.key().states();
@@ -394,22 +437,24 @@ void XTypeEngine::keyEvent(const fcitx::InputMethodEntry &,
         if (ch == '.' || ch == '!' || ch == '?')
             harvestSentence(ic->program());
 
-        _debounceTimer.reset();
-        int debounceMs = _cfg.inference.debounce_ms;
-        if (auto* ov = currentAppOverride(); ov && ov->debounce_ms.has_value())
-            debounceMs = *ov->debounce_ms;
-        uint64_t fireUs = fcitx::now(CLOCK_MONOTONIC) +
-                          static_cast<uint64_t>(debounceMs) * 1000;
-        auto icRef = ic->watch();
-        auto *icPtr = ic;
-        _debounceTimer = _instance->eventLoop().addTimeEvent(
-            CLOCK_MONOTONIC, fireUs, /*accuracy=*/0,
-            [this, icRef, icPtr](fcitx::EventSourceTime *, uint64_t) mutable {
-                if (!icRef.isValid()) return false;
-                // Do NOT reset _debounceTimer here — would destroy this object.
-                requestInference(std::move(icRef), icPtr);
-                return false;  // one-shot
-            });
+        if (_cfg.behaviour.trigger_mode != TriggerMode::Manual) {
+            _debounceTimer.reset();
+            int debounceMs = _cfg.inference.debounce_ms;
+            if (auto* ov = currentAppOverride(); ov && ov->debounce_ms.has_value())
+                debounceMs = *ov->debounce_ms;
+            uint64_t fireUs = fcitx::now(CLOCK_MONOTONIC) +
+                              static_cast<uint64_t>(debounceMs) * 1000;
+            auto icRef = ic->watch();
+            auto *icPtr = ic;
+            _debounceTimer = _instance->eventLoop().addTimeEvent(
+                CLOCK_MONOTONIC, fireUs, /*accuracy=*/0,
+                [this, icRef, icPtr](fcitx::EventSourceTime *, uint64_t) mutable {
+                    if (!icRef.isValid()) return false;
+                    // Do NOT reset _debounceTimer here — would destroy this object.
+                    requestInference(std::move(icRef), icPtr);
+                    return false;  // one-shot
+                });
+        }
         return;
     }
 
@@ -489,6 +534,7 @@ void XTypeEngine::requestInference(
     if (_profile) _profile->setCurrentApp(icPtr->program());
 
     auto ctx = _ctx.contextText();
+    if (_phraseBlock.matches(ctx)) return;
     if (static_cast<int>(ctx.size()) < _cfg.inference.min_context_chars)
         return;
     if (static_cast<int>(ctx.size()) > _cfg.inference.context_window)
@@ -561,15 +607,26 @@ void XTypeEngine::requestInference(
             baseIn.budgetChars     = kPromptBudget;
             if (_profile && !_profile->commonOpeners().empty())
                 baseIn.commonOpeners = _profile->commonOpeners();
-            if (!_cfg.user_prompt.tone.empty() && _cfg.user_prompt.tone != "default") {
+            {
                 static const std::unordered_map<std::string, const char*> kToneMap = {
                     {"technical",    " Prefer precise technical terminology."},
                     {"casual",       " Use a relaxed, conversational tone."},
                     {"professional", " Use formal, professional language."},
                     {"concise",      " Be brief and direct."},
                 };
-                auto it = kToneMap.find(_cfg.user_prompt.tone);
-                if (it != kToneMap.end()) baseIn.base += it->second;
+                std::string effectiveTone = _cfg.user_prompt.tone;
+                if (!_lastProg.empty()) {
+                    if (auto* appOv = currentAppOverride();
+                        appOv && appOv->mode.has_value() && !appOv->mode->empty())
+                        effectiveTone = *appOv->mode;
+                }
+                if (!effectiveTone.empty() && effectiveTone != "default") {
+                    auto it = kToneMap.find(effectiveTone);
+                    if (it != kToneMap.end())
+                        baseIn.base += it->second;
+                    else
+                        log_warn(("requestInference: unrecognised tone '" + effectiveTone + "'").c_str());
+                }
             }
             if (!_lastProg.empty()) {
                 if (auto* appOv = currentAppOverride();
@@ -796,6 +853,11 @@ void XTypeEngine::harvestSentence(const std::string &program) {
     }
     if (isBlocked(program)) {
         dbg("[harvest] drop blocked app=%s", program.c_str());
+        _userTypedSinceLastTerminator.clear();
+        return;
+    }
+    if (_phraseBlock.matches(_ctx.contextText())) {
+        dbg("[harvest] drop phrase-blocked");
         _userTypedSinceLastTerminator.clear();
         return;
     }
@@ -1047,17 +1109,27 @@ void XTypeEngine::applyPrompt() {
         }
     }
 
-    // Tone: append a short style modifier when a non-default tone is set.
-    if (!_cfg.user_prompt.tone.empty() && _cfg.user_prompt.tone != "default") {
+    // Tone: per-app mode overrides global tone; append a short style modifier.
+    {
         static const std::unordered_map<std::string, const char*> kToneMap = {
             {"technical",    " Prefer precise technical terminology."},
             {"casual",       " Use a relaxed, conversational tone."},
             {"professional", " Use formal, professional language."},
             {"concise",      " Be brief and direct."},
         };
-        auto it = kToneMap.find(_cfg.user_prompt.tone);
-        if (it != kToneMap.end())
-            in.base += it->second;
+        std::string effectiveTone = _cfg.user_prompt.tone;
+        if (!_lastProg.empty()) {
+            if (auto* ov = currentAppOverride();
+                ov && ov->mode.has_value() && !ov->mode->empty())
+                effectiveTone = *ov->mode;
+        }
+        if (!effectiveTone.empty() && effectiveTone != "default") {
+            auto it = kToneMap.find(effectiveTone);
+            if (it != kToneMap.end())
+                in.base += it->second;
+            else
+                log_warn(("applyPrompt: unrecognised tone '" + effectiveTone + "'").c_str());
+        }
     }
 
     // Per-app prompt addendum — only applied when an active app is known.

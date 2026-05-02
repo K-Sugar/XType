@@ -25,6 +25,7 @@ TEST_CASE("full config round-trips every field") {
     CHECK(cfg.inference.stop_tokens == std::vector<std::string>{".", "\n"});
     CHECK(cfg.behaviour.engine_enabled == false);
     CHECK(cfg.behaviour.trigger_mode == TriggerMode::Manual);
+    CHECK(cfg.behaviour.trigger_key == "ctrl+enter");
     CHECK(cfg.behaviour.accept_full_key == AcceptKey::Enter);
     CHECK(cfg.behaviour.partial_accept == false);
     CHECK(cfg.behaviour.blocklist_apps == std::vector<std::string>{"kate", "subl"});

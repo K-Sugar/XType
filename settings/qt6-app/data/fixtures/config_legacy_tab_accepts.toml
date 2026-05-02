@@ -16,8 +16,6 @@ engine_enabled = true
 trigger_mode = "pause"
 accept_full_key = "tab"
 tab_accepts_word = false
-esc_dismisses = true
-passthrough_terminals = true
 blocklist_apps = ["konsole", "alacritty", "keepassxc", "1password", "bitwarden", "gnome-keyring", "seahorse"]
 blocked_phrases = []
 

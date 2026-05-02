@@ -14,10 +14,9 @@ stop_tokens = [".", "!", "?", "\n"]
 [behaviour]
 engine_enabled = true
 trigger_mode = "pause"
+trigger_key = "ctrl+space"
 accept_full_key = "tab"
 partial_accept = true
-esc_dismisses = true
-passthrough_terminals = true
 blocklist_apps = ["konsole", "alacritty", "keepassxc", "1password", "bitwarden", "gnome-keyring", "seahorse"]
 blocked_phrases = []
 

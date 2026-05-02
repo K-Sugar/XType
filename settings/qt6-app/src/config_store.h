@@ -17,10 +17,9 @@ class ConfigStore : public QObject {
     // Behaviour
     Q_PROPERTY(bool        engineEnabled    READ engineEnabled    WRITE setEngineEnabled    NOTIFY engineEnabledChanged)
     Q_PROPERTY(QString     triggerMode      READ triggerMode      WRITE setTriggerMode      NOTIFY triggerModeChanged)
+    Q_PROPERTY(QString     triggerKey       READ triggerKey       WRITE setTriggerKey       NOTIFY triggerKeyChanged)
     Q_PROPERTY(QString     acceptKey        READ acceptKey        WRITE setAcceptKey        NOTIFY acceptKeyChanged)
     Q_PROPERTY(bool        partialAccept    READ partialAccept    WRITE setPartialAccept    NOTIFY partialAcceptChanged)
-    Q_PROPERTY(bool        escDismisses     READ escDismisses     WRITE setEscDismisses     NOTIFY escDismissesChanged)
-    Q_PROPERTY(bool        passThroughTerminals READ passThroughTerminals WRITE setPassThroughTerminals NOTIFY passThroughTerminalsChanged)
     Q_PROPERTY(QStringList blocklistApps   READ blocklistApps    WRITE setBlocklistApps    NOTIFY blocklistAppsChanged)
     Q_PROPERTY(QStringList blockedPhrases  READ blockedPhrases   WRITE setBlockedPhrases   NOTIFY blockedPhrasesChanged)
 
@@ -66,10 +65,9 @@ public:
     // --- Getters ---
     bool        engineEnabled()          const { return _engineEnabled; }
     QString     triggerMode()            const { return _triggerMode; }
+    QString     triggerKey()             const { return _triggerKey; }
     QString     acceptKey()              const { return _acceptKey; }
     bool        partialAccept()          const { return _partialAccept; }
-    bool        escDismisses()           const { return _escDismisses; }
-    bool        passThroughTerminals()   const { return _passThroughTerminals; }
     QStringList blocklistApps()          const { return _blocklistApps; }
     QStringList blockedPhrases()         const { return _blockedPhrases; }
 
@@ -102,10 +100,9 @@ public:
     // --- Setters (each emits its own xChanged + schedules debounce save) ---
     void setEngineEnabled(bool v);
     void setTriggerMode(const QString &v);
+    void setTriggerKey(const QString &v);
     void setAcceptKey(const QString &v);
     void setPartialAccept(bool v);
-    void setEscDismisses(bool v);
-    void setPassThroughTerminals(bool v);
     void setBlocklistApps(const QStringList &v);
     void setBlockedPhrases(const QStringList &v);
 
@@ -151,10 +148,9 @@ signals:
     // Per-property signals
     void engineEnabledChanged();
     void triggerModeChanged();
+    void triggerKeyChanged();
     void acceptKeyChanged();
     void partialAcceptChanged();
-    void escDismissesChanged();
-    void passThroughTerminalsChanged();
     void blocklistAppsChanged();
     void blockedPhrasesChanged();
 
@@ -192,12 +188,11 @@ private:
     QTimer  _debounce;
 
     // Behaviour
-    bool        _engineEnabled        = true;
-    QString     _triggerMode          = "pause";
-    QString     _acceptKey            = "tab";
-    bool        _partialAccept        = true;
-    bool        _escDismisses         = true;
-    bool        _passThroughTerminals = true;
+    bool        _engineEnabled   = true;
+    QString     _triggerMode     = "pause";
+    QString     _triggerKey      = "ctrl+space";
+    QString     _acceptKey       = "tab";
+    bool        _partialAccept   = true;
     QStringList _blocklistApps;
     QStringList _blockedPhrases;
 

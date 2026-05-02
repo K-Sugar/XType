@@ -55,13 +55,11 @@ XTypeConfig config_loader::load(const std::string& path) {
             cfg.behaviour.partial_accept = *v;
         else if (auto v2 = (*t)["tab_accepts_word"].value<bool>())
             cfg.behaviour.partial_accept = *v2;
-        if (auto v = (*t)["esc_dismisses"].value<bool>())     cfg.behaviour.esc_dismisses          = *v;
-        if (auto v = (*t)["passthrough_terminals"].value<bool>())
-            cfg.behaviour.passthrough_terminals = *v;
         if (auto v = (*t)["trigger_mode"].value<std::string>()) {
             if (*v == "manual") cfg.behaviour.trigger_mode = TriggerMode::Manual;
             else                cfg.behaviour.trigger_mode = TriggerMode::Pause;
         }
+        if (auto v = (*t)["trigger_key"].value<std::string>()) cfg.behaviour.trigger_key = *v;
         if (auto v = (*t)["accept_full_key"].value<std::string>()) {
             if (*v == "enter")      cfg.behaviour.accept_full_key = AcceptKey::Enter;
             else if (*v == "right") cfg.behaviour.accept_full_key = AcceptKey::Right;

@@ -89,13 +89,12 @@ void ConfigStore::load() {
 
     // --- [behaviour] ---
     if (auto *beh = root["behaviour"].as_table()) {
-        if (auto v = (*beh)["engine_enabled"].value<bool>())      _engineEnabled = *v;
-        if (auto v = (*beh)["trigger_mode"].value<std::string>()) _triggerMode = QString::fromStdString(*v);
-        if (auto v = (*beh)["accept_full_key"].value<std::string>()) _acceptKey = QString::fromStdString(*v);
-        if (auto v = (*beh)["partial_accept"].value<bool>())       _partialAccept = *v;
-        if (auto v = (*beh)["esc_dismisses"].value<bool>())        _escDismisses = *v;
-        if (auto v = (*beh)["passthrough_terminals"].value<bool>()) _passThroughTerminals = *v;
-        if (auto *arr = (*beh)["blocklist_apps"].as_array())       _blocklistApps = tomlArrayToStringList(arr);
+        if (auto v = (*beh)["engine_enabled"].value<bool>())        _engineEnabled = *v;
+        if (auto v = (*beh)["trigger_mode"].value<std::string>())   _triggerMode = QString::fromStdString(*v);
+        if (auto v = (*beh)["trigger_key"].value<std::string>())    _triggerKey  = QString::fromStdString(*v);
+        if (auto v = (*beh)["accept_full_key"].value<std::string>()) _acceptKey  = QString::fromStdString(*v);
+        if (auto v = (*beh)["partial_accept"].value<bool>())         _partialAccept = *v;
+        if (auto *arr = (*beh)["blocklist_apps"].as_array())         _blocklistApps = tomlArrayToStringList(arr);
         if (auto *arr = (*beh)["blocked_phrases"].as_array())      _blockedPhrases = tomlArrayToStringList(arr);
 
         // Legacy: tab_accepts_word → partialAccept
@@ -180,12 +179,11 @@ void ConfigStore::writeToml(const QString &path) {
 
     // [behaviour]
     toml::table beh;
-    beh.insert_or_assign("engine_enabled",       _engineEnabled);
-    beh.insert_or_assign("trigger_mode",         _triggerMode.toStdString());
-    beh.insert_or_assign("accept_full_key",       _acceptKey.toStdString());
-    beh.insert_or_assign("partial_accept",        _partialAccept);
-    beh.insert_or_assign("esc_dismisses",         _escDismisses);
-    beh.insert_or_assign("passthrough_terminals", _passThroughTerminals);
+    beh.insert_or_assign("engine_enabled", _engineEnabled);
+    beh.insert_or_assign("trigger_mode",   _triggerMode.toStdString());
+    beh.insert_or_assign("trigger_key",    _triggerKey.toStdString());
+    beh.insert_or_assign("accept_full_key", _acceptKey.toStdString());
+    beh.insert_or_assign("partial_accept", _partialAccept);
     writeStringArray(beh, "blocklist_apps",  _blocklistApps);
     writeStringArray(beh, "blocked_phrases", _blockedPhrases);
     root.insert_or_assign("behaviour", std::move(beh));
@@ -261,13 +259,12 @@ void ConfigStore::resetAll() {
     }
 
     // 2. Reset all fields to XTypeConfig defaults
-    _engineEnabled        = true;
-    _triggerMode          = "pause";
-    _acceptKey            = "tab";
-    _partialAccept        = true;
-    _escDismisses         = true;
-    _passThroughTerminals = true;
-    _blocklistApps        = {"konsole","alacritty","keepassxc","1password","bitwarden","gnome-keyring","seahorse"};
+    _engineEnabled = true;
+    _triggerMode   = "pause";
+    _triggerKey    = "ctrl+space";
+    _acceptKey     = "tab";
+    _partialAccept = true;
+    _blocklistApps = {"konsole","alacritty","keepassxc","1password","bitwarden","gnome-keyring","seahorse"};
     _blockedPhrases       = {};
 
     _model            = "qwen2.5:1.5b";
@@ -306,10 +303,9 @@ void ConfigStore::resetAll() {
     // 4. Notify QML bindings (emit all per-property signals)
     emit engineEnabledChanged();
     emit triggerModeChanged();
+    emit triggerKeyChanged();
     emit acceptKeyChanged();
     emit partialAcceptChanged();
-    emit escDismissesChanged();
-    emit passThroughTerminalsChanged();
     emit blocklistAppsChanged();
     emit blockedPhrasesChanged();
     emit modelChanged();
@@ -344,12 +340,11 @@ void ConfigStore::resetAll() {
 #define CS_SET(field, signal) \
     do { if (_##field == v) return; _##field = v; emit signal(); emit changed(); scheduleSave(); } while(0)
 
-void ConfigStore::setEngineEnabled(bool v)              { CS_SET(engineEnabled,        engineEnabledChanged); }
-void ConfigStore::setPartialAccept(bool v)              { CS_SET(partialAccept,         partialAcceptChanged); }
-void ConfigStore::setEscDismisses(bool v)               { CS_SET(escDismisses,          escDismissesChanged); }
-void ConfigStore::setPassThroughTerminals(bool v)       { CS_SET(passThroughTerminals,  passThroughTerminalsChanged); }
-void ConfigStore::setTriggerMode(const QString &v)      { CS_SET(triggerMode,           triggerModeChanged); }
-void ConfigStore::setAcceptKey(const QString &v)        { CS_SET(acceptKey,             acceptKeyChanged); }
+void ConfigStore::setEngineEnabled(bool v)              { CS_SET(engineEnabled,  engineEnabledChanged); }
+void ConfigStore::setPartialAccept(bool v)              { CS_SET(partialAccept,  partialAcceptChanged); }
+void ConfigStore::setTriggerMode(const QString &v)      { CS_SET(triggerMode,    triggerModeChanged); }
+void ConfigStore::setTriggerKey(const QString &v)       { CS_SET(triggerKey,     triggerKeyChanged); }
+void ConfigStore::setAcceptKey(const QString &v)        { CS_SET(acceptKey,      acceptKeyChanged); }
 void ConfigStore::setBlocklistApps(const QStringList &v){ CS_SET(blocklistApps,         blocklistAppsChanged); }
 void ConfigStore::setBlockedPhrases(const QStringList &v){ CS_SET(blockedPhrases,       blockedPhrasesChanged); }
 
