@@ -123,6 +123,8 @@ XTypeEngine::XTypeEngine(fcitx::AddonManager *manager)
 }
 
 XTypeEngine::~XTypeEngine() {
+    // Signal and join profile worker BEFORE touching any other member.
+    _shutdownFlag.store(true, std::memory_order_release);
     if (_profileWorker && _profileWorker->joinable())
         _profileWorker->join();
 }
@@ -403,6 +405,7 @@ void XTypeEngine::keyEvent(const fcitx::InputMethodEntry &,
         _debounceTimer = _instance->eventLoop().addTimeEvent(
             CLOCK_MONOTONIC, fireUs, /*accuracy=*/0,
             [this, icRef, icPtr](fcitx::EventSourceTime *, uint64_t) mutable {
+                if (!icRef.isValid()) return false;
                 // Do NOT reset _debounceTimer here — would destroy this object.
                 requestInference(std::move(icRef), icPtr);
                 return false;  // one-shot
@@ -914,26 +917,32 @@ void XTypeEngine::writeAcceptSignals() {
     FILE* f = std::fopen(tmp.c_str(), "w");
     if (!f) return;
 
-    std::fprintf(f, "{\n  \"version\": 1,\n  \"saved_at\": %" PRId64 ",\n"
-                    "  \"accept_embeddings\": [\n",
-                 static_cast<int64_t>(std::time(nullptr)));
+    bool ok = true;
+    ok &= (std::fprintf(f, "{\n  \"version\": 1,\n  \"saved_at\": %" PRId64 ",\n"
+                           "  \"accept_embeddings\": [\n",
+                        static_cast<int64_t>(std::time(nullptr))) >= 0);
 
     bool firstVec = true;
     for (const auto& vec : _acceptEmbedRing) {
-        if (!firstVec) std::fputs(",\n", f);
+        if (!firstVec) ok &= (std::fputs(",\n", f) >= 0);
         firstVec = false;
-        std::fputs("    [", f);
+        ok &= (std::fputs("    [", f) >= 0);
         bool firstVal = true;
         for (float v : vec) {
-            if (!firstVal) std::fputc(',', f);
+            if (!firstVal) ok &= (std::fputc(',', f) != EOF);
             firstVal = false;
-            std::fprintf(f, "%.7g", static_cast<double>(v));
+            ok &= (std::fprintf(f, "%.7g", static_cast<double>(v)) >= 0);
         }
-        std::fputs("]", f);
+        ok &= (std::fputs("]", f) >= 0);
     }
 
-    std::fputs("\n  ]\n}\n", f);
+    ok &= (std::fputs("\n  ]\n}\n", f) >= 0);
     std::fclose(f);
+
+    if (!ok) {
+        std::remove(tmp.c_str());
+        return;
+    }
     std::rename(tmp.c_str(), _acceptSignalsPath.c_str());
 }
 
@@ -1090,6 +1099,7 @@ void XTypeEngine::kickProfileLoad() {
     std::string currentApp  = _lastProg;  // capture for app-weighted exemplar selection
 
     _profileWorker.emplace([this, corpusPath, profilePath, indexPath, ollamaHost, currentApp]() {
+        if (_shutdownFlag.load(std::memory_order_acquire)) return;
         StyleProfile sp = StyleProfile::deserialize(profilePath);
         bool stale = StyleProfile::isStale(corpusPath, profilePath);
         bool needRebuild = sp.exemplars().empty() || stale;
@@ -1101,6 +1111,7 @@ void XTypeEngine::kickProfileLoad() {
         if (needRebuild) {
             sp = StyleProfile{};
             sp.setCurrentApp(currentApp);
+            if (_shutdownFlag.load(std::memory_order_acquire)) return;
             sp.loadFromCorpus(corpusPath);
             if (!sp.exemplars().empty()) {
                 sp.serialize(profilePath);
@@ -1111,6 +1122,7 @@ void XTypeEngine::kickProfileLoad() {
 
         // Build embedding index on the background thread (blocking HTTP OK here).
         if (!indexPath.empty() && !ollamaHost.empty()) {
+            if (_shutdownFlag.load(std::memory_order_acquire)) return;
             sp.buildEmbeddingIndex(corpusPath, indexPath, ollamaHost);
             // Hot-swap the index so per-request retrieval picks it up immediately.
             auto newIndex = std::make_shared<std::vector<EmbeddingEntry>>(

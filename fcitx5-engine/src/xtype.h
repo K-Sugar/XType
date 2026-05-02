@@ -102,6 +102,7 @@ private:
     std::unique_ptr<StyleProfile>            _profile;          // main-thread only
     std::unique_ptr<fcitx::EventSourceTime>  _profileRefreshTimer;
     std::optional<std::thread>               _profileWorker;    // owning; joined in dtor
+    std::atomic<bool>                        _shutdownFlag{false};
     std::atomic<bool>                        _profileLoading{false};
     std::string                              _corpusPathExpanded;
     std::string                              _profilePathExpanded;
