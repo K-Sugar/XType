@@ -131,7 +131,7 @@ Item {
                 Text {
                     id: modelLabel
                     anchors.centerIn: parent
-                    text: "Qwen3-1.7B"
+                    text: Config.model
                     font.family: Theme.monoFamily; font.pixelSize: 10
                     color: Theme.purpleSoft
                     renderType: Text.NativeRendering
