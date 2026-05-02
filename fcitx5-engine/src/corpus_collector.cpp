@@ -486,7 +486,15 @@ void CorpusCollector::run() {
 
 void CorpusCollector::flushLocked(std::deque<CorpusEntry>& drained) {
     std::ofstream out(_path, std::ios::app | std::ios::binary);
-    if (!out) return;
+    if (!out) {
+        if (_log) _log("corpus: cannot open corpus file for writing");
+        std::lock_guard<std::mutex> lk(_mu);
+        for (auto& e : drained) {
+            if (_queue.size() < kQueueCap)
+                _queue.push_front(std::move(e));
+        }
+        return;
+    }
 
     namespace fs = std::filesystem;
     auto tsPath = _path.parent_path() / (_path.stem().string() + "_timestamps.txt");
@@ -500,6 +508,10 @@ void CorpusCollector::flushLocked(std::deque<CorpusEntry>& drained) {
         }
         out.write(entry.text.data(), static_cast<std::streamsize>(entry.text.size()));
         out.put('\n');
+        if (!out.good()) {
+            if (_log) _log("corpus: write error (disk full?)");
+            break;
+        }
         if (tsOut) tsOut << now << '\n';
     }
     out.flush();

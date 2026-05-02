@@ -388,7 +388,7 @@ void XTypeEngine::keyEvent(const fcitx::InputMethodEntry &,
             if (pos != std::string::npos && pos + 1 < buf.size())
                 buf.erase(0, pos + 1);
             else
-                buf.clear();
+                buf.erase(0, kUserBufCap / 4);
         }
         _userTypedSinceLastTerminator.push_back(ch);
         if (ch == '.' || ch == '!' || ch == '?')

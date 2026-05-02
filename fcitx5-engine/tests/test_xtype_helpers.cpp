@@ -349,3 +349,46 @@ TEST_CASE("accept_signals: ring on disk > maxRing is capped on load", "[embed][a
     CHECK(loaded.back()[0]  == 4.f);
     std::remove(path.c_str());
 }
+
+// ── S1b: _userTypedSinceLastTerminator rolling delete ────────────────────────
+// Mirrors the overflow handler in xtype.cpp so it can be tested without the
+// fcitx5 engine harness.
+
+static constexpr size_t kUserBufCap = 2048;
+
+static void appendCharBuffered(std::string& buf, char ch) {
+    if (buf.size() >= kUserBufCap) {
+        size_t pos = buf.find_first_of(".!?", kUserBufCap / 2);
+        if (pos != std::string::npos && pos + 1 < buf.size())
+            buf.erase(0, pos + 1);
+        else
+            buf.erase(0, kUserBufCap / 4);
+    }
+    buf.push_back(ch);
+}
+
+TEST_CASE("buffer overflow: rolling delete keeps ~75% when no sentence boundary", "[corpus][buf]") {
+    // Fill to capacity with 'a' — no sentence terminators.
+    std::string buf(kUserBufCap, 'a');
+    appendCharBuffered(buf, 'b');
+
+    // Expected: erase oldest 25%, then append 'b'.
+    size_t expected = kUserBufCap - kUserBufCap / 4 + 1;
+    REQUIRE(buf.size() == expected);
+    REQUIRE_FALSE(buf.empty());
+    REQUIRE(buf.back() == 'b');
+}
+
+TEST_CASE("buffer overflow: erase to sentence boundary when one exists past midpoint", "[corpus][buf]") {
+    std::string buf(kUserBufCap, 'a');
+    // Place a '.' just past the midpoint so it is found by find_first_of.
+    size_t termPos = kUserBufCap / 2 + 10;
+    buf[termPos] = '.';
+
+    appendCharBuffered(buf, 'x');
+
+    // Expected: erase [0..termPos] inclusive, keep chars after '.', append 'x'.
+    size_t expected = kUserBufCap - termPos - 1 + 1;
+    REQUIRE(buf.size() == expected);
+    REQUIRE(buf.back() == 'x');
+}

@@ -625,6 +625,42 @@ TEST_CASE("key-repeat filter rejects when run appears mid-string", "[corpus][fil
 
 // ── L6: per-app tagged write format ─────────────────────────────────────────
 
+// ── S1b: flush failure ───────────────────────────────────────────────────────
+
+TEST_CASE("flush failure logs error and re-queues entries for later flush", "[corpus][io]") {
+    auto p = makeTempCorpusPath("flush_fail");
+    bool errorLogged = false;
+    {
+        LearningConfig cfg = makeCfg(p);
+        CorpusCollector c(cfg);
+        c.setLogSink([&](std::string msg) {
+            if (msg.find("cannot open") != std::string::npos)
+                errorLogged = true;
+        });
+
+        // Make parent dir read-only before any flush occurs so the first open fails.
+        fs::permissions(p.parent_path(),
+                        fs::perms::owner_read | fs::perms::owner_exec,
+                        fs::perm_options::replace);
+
+        c.record("The quick brown fox jumps over the lazy dog today");
+        c.record("She walked across the room with great determination now");
+
+        // Wait for the 1-second flush to be attempted (and fail).
+        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+
+        // Restore permissions so re-queued entries can flush on destruction.
+        fs::permissions(p.parent_path(), fs::perms::owner_all, fs::perm_options::replace);
+    }
+    // Destructor joins thread; final flush (with restored permissions) must succeed.
+
+    REQUIRE(errorLogged);
+    auto contents = readAll(p);
+    REQUIRE(contents.find("quick brown fox") != std::string::npos);
+
+    fs::remove_all(p.parent_path());
+}
+
 TEST_CASE("record with app writes tagged format; record without app writes plain", "[corpus][l6][write]") {
     auto p = makeTempCorpusPath("l6_tagged_write");
     {
