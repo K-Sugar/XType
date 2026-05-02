@@ -144,6 +144,8 @@ struct WriteState {
         : my_gen(g), cur_gen(cg), on_token(cb) {}
 };
 
+static constexpr size_t kMaxLineBuf = 65536;  // 64 KB
+
 static size_t stream_cb(char* ptr, size_t /*size*/, size_t nmemb, void* ud) {
     auto* s = static_cast<WriteState*>(ud);
     // Returning 0 aborts curl with CURLE_WRITE_ERROR — our cancel signal.
@@ -151,6 +153,10 @@ static size_t stream_cb(char* ptr, size_t /*size*/, size_t nmemb, void* ud) {
         return 0;
 
     s->line_buf.append(ptr, nmemb);
+
+    // Malformed stream — no newline in 64 KB; abort transfer.
+    if (s->line_buf.size() > kMaxLineBuf)
+        return 0;
 
     size_t start = 0, nl;
     while ((nl = s->line_buf.find('\n', start)) != std::string::npos) {

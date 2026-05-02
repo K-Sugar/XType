@@ -78,3 +78,9 @@ target_link_libraries(test_xtype_helpers PRIVATE
     Catch2::Catch2WithMain
 )
 catch_discover_tests(test_xtype_helpers)
+
+add_executable(test_inference_client test_inference_client.cpp)
+target_link_libraries(test_inference_client PRIVATE
+    Catch2::Catch2WithMain
+)
+catch_discover_tests(test_inference_client)
