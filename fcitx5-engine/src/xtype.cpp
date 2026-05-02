@@ -640,6 +640,8 @@ void XTypeEngine::requestInference(
                 });
         },
         [this, myGen, icRef, icPtr, startUs]() {
+            _consecutiveFailures.store(0, std::memory_order_relaxed);
+            _ollamaReachable.store(true, std::memory_order_relaxed);
             dbg("inference done, myGen=%llu curGen=%llu", (unsigned long long)myGen, (unsigned long long)_gen);
             _instance->eventDispatcher().scheduleWithContext(
                 icRef,
@@ -709,7 +711,12 @@ void XTypeEngine::requestInference(
                     }
                 });
         },
-        [](std::string err) { dbg("inference error: %s", err.c_str()); },
+        [this](std::string err) {
+            dbg("inference error: %s", err.c_str());
+            auto failures = _consecutiveFailures.fetch_add(1, std::memory_order_relaxed) + 1;
+            if (failures >= kOfflineThreshold)
+                _ollamaReachable.store(false, std::memory_order_relaxed);
+        },
         std::move(promptFactory)
     );
 }
@@ -838,18 +845,20 @@ void XTypeEngine::writeMetrics() {
     auto tmp = (dir / "metrics.json.tmp").string();
     auto dst = (dir / "metrics.json").string();
 
-    char buf[512];
+    char buf[640];
     std::snprintf(buf, sizeof(buf),
         "{\"latency_p50_ms\":%d,\"latency_p95_ms\":%d,"
         "\"suggestions_generated\":%" PRIu64 ","
         "\"suggestions_accepted\":%" PRIu64 ","
         "\"chars_accepted\":%" PRIu64 ","
+        "\"ollama_reachable\":%s,"
         "\"updated_at\":%" PRId64 "}\n",
         _metrics.latency_p50_ms.load(),
         _metrics.latency_p95_ms.load(),
         static_cast<uint64_t>(_metrics.suggestions_generated.load()),
         static_cast<uint64_t>(_metrics.suggestions_accepted.load()),
         static_cast<uint64_t>(_metrics.chars_accepted.load()),
+        _ollamaReachable.load(std::memory_order_relaxed) ? "true" : "false",
         static_cast<int64_t>(now));
 
     if (FILE* f = std::fopen(tmp.c_str(), "w")) {

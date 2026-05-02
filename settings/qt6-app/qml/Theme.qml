@@ -11,6 +11,8 @@ QtObject {
     readonly property string sansFamily:  "Inter"
     readonly property string monoFamily:  "JetBrains Mono"
 
+    readonly property color red:          "#e05252"
+
     // OKLCH(0.62 0.17 288) → sRGB
     readonly property color purple:      "#8470e5"
     // OKLCH(0.78 0.12 288)

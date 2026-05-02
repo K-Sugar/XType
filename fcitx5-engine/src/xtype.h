@@ -104,6 +104,8 @@ private:
     std::optional<std::thread>               _profileWorker;    // owning; joined in dtor
     std::atomic<bool>                        _shutdownFlag{false};
     std::atomic<bool>                        _profileLoading{false};
+    std::atomic<bool>                        _ollamaReachable{true};
+    std::atomic<uint32_t>                    _consecutiveFailures{0};
     std::string                              _corpusPathExpanded;
     std::string                              _profilePathExpanded;
     std::string                              _embeddingIndexPath;
@@ -122,7 +124,8 @@ private:
     void writeMetrics();
     void writeRecentEvents();
 
-    static constexpr size_t kUserBufCap        = 2048;
-    static constexpr int    kProfileRefreshSec = 300;   // 5 min default
-    static constexpr size_t kPromptBudget      = 2000;
+    static constexpr size_t   kUserBufCap        = 2048;
+    static constexpr int      kProfileRefreshSec = 300;   // 5 min default
+    static constexpr size_t   kPromptBudget      = 2000;
+    static constexpr uint32_t kOfflineThreshold  = 3;
 };

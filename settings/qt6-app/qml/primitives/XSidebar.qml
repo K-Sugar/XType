@@ -205,6 +205,24 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
             }
         }
+
+        // Ollama offline pill — visible only when reachability is false
+        Rectangle {
+            visible: !Engine.ollamaReachable
+            width: parent.width
+            implicitHeight: 22
+            radius: height / 2
+            color: Theme.red
+            Text {
+                anchors.centerIn: parent
+                text: "Ollama Offline"
+                font.family: Theme.sansFamily
+                font.pixelSize: 11
+                font.weight: Font.Medium
+                color: "white"
+                renderType: Text.NativeRendering
+            }
+        }
     }
 
     // ── Inline component ───────────────────────────────────────────────────

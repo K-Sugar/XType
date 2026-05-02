@@ -170,15 +170,26 @@ void EngineProbe::poll() {
 
     QFile mf(QDir::homePath() + "/.local/share/xtype/metrics.json");
     if (mf.open(QIODevice::ReadOnly)) {
-        QByteArray data = mf.readAll();
+        const QString metricsStr = QString::fromUtf8(mf.readAll());
         mf.close();
+
         QRegularExpression re(R"("latency_p50_ms"\s*:\s*(\d+))");
-        auto m = re.match(QString::fromUtf8(data));
+        auto m = re.match(metricsStr);
         if (m.hasMatch()) {
             int p50 = m.captured(1).toInt();
             if (p50 != _latencyP50) {
                 _latencyP50 = p50;
                 emit latencyP50Changed();
+            }
+        }
+
+        QRegularExpression re_reachable(R"("ollama_reachable"\s*:\s*(true|false))");
+        auto m2 = re_reachable.match(metricsStr);
+        if (m2.hasMatch()) {
+            bool reachable = (m2.captured(1) == "true");
+            if (reachable != _ollamaReachable) {
+                _ollamaReachable = reachable;
+                emit ollamaReachableChanged();
             }
         }
     }
