@@ -7,6 +7,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <set>
 #include <string>
 #include <thread>
 #include <vector>
@@ -106,6 +107,8 @@ private:
     std::atomic<bool>                        _profileLoading{false};
     std::atomic<bool>                        _ollamaReachable{true};
     std::atomic<uint32_t>                    _consecutiveFailures{0};
+    std::set<std::string>                    _seenApps;         // main-thread only
+    std::string                              _activeAppsPath;   // set in ctor from data dir
     std::string                              _corpusPathExpanded;
     std::string                              _profilePathExpanded;
     std::string                              _embeddingIndexPath;
@@ -123,6 +126,8 @@ private:
     void recordLatency(int ms);
     void writeMetrics();
     void writeRecentEvents();
+    void writeActiveApps();
+    void loadActiveApps();
 
     static constexpr size_t   kUserBufCap        = 2048;
     static constexpr int      kProfileRefreshSec = 300;   // 5 min default

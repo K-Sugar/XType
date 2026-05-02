@@ -35,24 +35,34 @@ Item {
                     XSection { title: "Per-app settings"; num: "01"; width: parent.width }
 
                     Repeater {
-                        model: AppsKnown.knownApps()
+                        model: Engine.activeApps
                         delegate: XAppRow {
                             required property var modelData
-                            appLabel: modelData.label
-                            appSub: modelData.canonical
-                            iconCls: modelData.iconCls
-                            selected: root.selectedId === modelData.id
+                            appLabel: modelData.name
+                            appSub: modelData.name
+                            iconCls: ""
+                            selected: root.selectedId === modelData.name
                             width: parent ? parent.width : 0
-                            onClicked: root.selectedId = modelData.id
+                            onClicked: root.selectedId = modelData.name
 
                             XToggle {
                                 on: {
-                                    const entry = Config.apps[modelData.canonical]
+                                    const entry = Config.apps[modelData.name]
                                     return entry ? (entry.enabled !== undefined ? entry.enabled : true) : true
                                 }
-                                onToggled: (v) => Config.setApp(modelData.canonical, "enabled", v)
+                                onToggled: (v) => Config.setApp(modelData.name, "enabled", v)
                             }
                         }
+                    }
+
+                    Text {
+                        visible: Engine.activeApps.length === 0
+                        text: "No apps seen yet. XType will show apps here as you use them."
+                        font.family: Theme.sansFamily; font.pixelSize: 13
+                        color: Theme.ink45
+                        width: parent.width
+                        wrapMode: Text.WordWrap
+                        renderType: Text.NativeRendering
                     }
                 }
             }
@@ -81,7 +91,7 @@ Item {
                         // Eyebrow
                         Text {
                             text: root.selectedId !== ""
-                                  ? "Configuring  ·  " + AppsKnown.labelForCanonical(AppsKnown.canonicalForId(root.selectedId))
+                                  ? "Configuring  ·  " + root.selectedId
                                   : ""
                             font.family: Theme.monoFamily; font.pixelSize: 11
                             font.capitalization: Font.AllUppercase; font.letterSpacing: 1.2
@@ -97,13 +107,12 @@ Item {
                             XToggle {
                                 on: {
                                     if (root.selectedId === "") return true
-                                    const c = AppsKnown.canonicalForId(root.selectedId)
-                                    const entry = Config.apps[c]
+                                    const entry = Config.apps[root.selectedId]
                                     return entry ? (entry.enabled !== undefined ? entry.enabled : true) : true
                                 }
                                 onToggled: (v) => {
                                     if (root.selectedId !== "")
-                                        Config.setApp(AppsKnown.canonicalForId(root.selectedId), "enabled", v)
+                                        Config.setApp(root.selectedId, "enabled", v)
                                 }
                             }
                         }
@@ -117,13 +126,13 @@ Item {
                                 model: ["Default", "Code-aware", "Email tone", "Casual", "Off"]
                                 currentIndex: {
                                     if (root.selectedId === "") return 0
-                                    const entry = Config.apps[AppsKnown.canonicalForId(root.selectedId)]
+                                    const entry = Config.apps[root.selectedId]
                                     const m = entry ? entry.mode || "Default" : "Default"
                                     return Math.max(0, ["Default","Code-aware","Email tone","Casual","Off"].indexOf(m))
                                 }
                                 onActivated: (i) => {
                                     if (root.selectedId === "") return
-                                    Config.setApp(AppsKnown.canonicalForId(root.selectedId), "mode", model[i])
+                                    Config.setApp(root.selectedId, "mode", model[i])
                                 }
                                 implicitWidth: 160; implicitHeight: 32
                                 font.family: Theme.sansFamily; font.pixelSize: 12
@@ -152,13 +161,13 @@ Item {
                                 min: 4; max: 48; step: 1
                                 value: {
                                     if (root.selectedId === "") return Config.numPredict
-                                    const entry = Config.apps[AppsKnown.canonicalForId(root.selectedId)]
+                                    const entry = Config.apps[root.selectedId]
                                     return entry && entry.num_predict ? entry.num_predict : Config.numPredict
                                 }
                                 width: 160
                                 onCommitted: (v) => {
                                     if (root.selectedId !== "")
-                                        Config.setApp(AppsKnown.canonicalForId(root.selectedId), "num_predict", v)
+                                        Config.setApp(root.selectedId, "num_predict", v)
                                 }
                             }
                         }
@@ -176,7 +185,7 @@ Item {
                                     const installed = Ollama.availableModels
                                     const defaultLabel = "Default (" + Config.model + ")"
                                     if (root.selectedId === "") return [defaultLabel]
-                                    const entry = Config.apps[AppsKnown.canonicalForId(root.selectedId)]
+                                    const entry = Config.apps[root.selectedId]
                                     const saved = entry && entry.model ? entry.model : ""
                                     let list = [defaultLabel]
                                     for (let i = 0; i < installed.length; ++i) list.push(installed[i])
@@ -188,7 +197,7 @@ Item {
                                 currentIndex: {
                                     if (root.selectedId === "") return 0
                                     const installed = Ollama.availableModels
-                                    const entry = Config.apps[AppsKnown.canonicalForId(root.selectedId)]
+                                    const entry = Config.apps[root.selectedId]
                                     const saved = entry && entry.model ? entry.model : ""
                                     if (!saved) return 0
                                     const idx = installed.indexOf(saved)
@@ -198,13 +207,12 @@ Item {
 
                                 onActivated: (i) => {
                                     if (root.selectedId === "") return
-                                    const canonical = AppsKnown.canonicalForId(root.selectedId)
                                     if (i === 0) {
-                                        Config.setApp(canonical, "model", null)
+                                        Config.setApp(root.selectedId, "model", null)
                                     } else {
                                         const installed = Ollama.availableModels
                                         if (i <= installed.length)
-                                            Config.setApp(canonical, "model", installed[i - 1])
+                                            Config.setApp(root.selectedId, "model", installed[i - 1])
                                         // i > installed.length → "(not installed)" entry, already saved — no action
                                     }
                                 }

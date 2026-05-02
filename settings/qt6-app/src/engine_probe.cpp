@@ -5,6 +5,7 @@
 #include <QFile>
 #include <QProcessEnvironment>
 #include <QRegularExpression>
+#include <QVariantMap>
 
 #include <ctime>
 #include <unistd.h>
@@ -191,6 +192,35 @@ void EngineProbe::poll() {
                 _ollamaReachable = reachable;
                 emit ollamaReachableChanged();
             }
+        }
+    }
+
+    QFile af(QDir::homePath() + "/.local/share/xtype/active_apps.json");
+    if (af.open(QIODevice::ReadOnly)) {
+        const QString appsStr = QString::fromUtf8(af.readAll());
+        af.close();
+
+        QVariantList newApps;
+        QRegularExpression nameRe(R"re("name"\s*:\s*"([^"]+)")re");
+        QRegularExpression lastSeenRe(R"re("last_seen"\s*:\s*(\d+))re");
+        QRegularExpression objRe(R"re(\{[^}]+\})re");
+        auto objIt = objRe.globalMatch(appsStr);
+        while (objIt.hasNext()) {
+            const QString obj = objIt.next().captured(0);
+            auto nameMatch = nameRe.match(obj);
+            if (nameMatch.hasMatch()) {
+                QVariantMap entry;
+                entry[QStringLiteral("name")] = nameMatch.captured(1);
+                auto lsMatch = lastSeenRe.match(obj);
+                entry[QStringLiteral("last_seen")] = lsMatch.hasMatch()
+                    ? lsMatch.captured(1).toLongLong() : 0LL;
+                newApps.append(entry);
+            }
+        }
+
+        if (newApps != _activeApps) {
+            _activeApps = newApps;
+            emit activeAppsChanged();
         }
     }
 }

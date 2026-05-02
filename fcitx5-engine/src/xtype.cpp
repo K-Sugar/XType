@@ -6,10 +6,12 @@
 #include <cinttypes>
 #include <cmath>
 #include <cstdarg>
+#include <cstdlib>
 #include <cstdio>
 #include <ctime>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -96,6 +98,13 @@ XTypeEngine::XTypeEngine(fcitx::AddonManager *manager)
 {
     _cfg = config_loader::load();
     _embedClient = std::make_unique<OllamaEmbedClient>(_cfg.inference.ollama_host);
+
+    {
+        auto dir = path_utils::expandTilde("~/.local/share/xtype");
+        _activeAppsPath = (dir / "active_apps.json").string();
+        loadActiveApps();
+    }
+
     dbg("config loaded: model=%s debounce=%dms engine_enabled=%d",
         _cfg.inference.model.c_str(),
         _cfg.inference.debounce_ms,
@@ -213,6 +222,11 @@ void XTypeEngine::activate(const fcitx::InputMethodEntry &,
     _lastProg = prog;
     if (appChanged)
         applyPrompt();        // re-apply prompt addendum for the new app
+
+    if (_seenApps.find(prog) == _seenApps.end()) {
+        _seenApps.insert(prog);
+        writeActiveApps();
+    }
 }
 
 void XTypeEngine::deactivate(const fcitx::InputMethodEntry &,
@@ -976,6 +990,112 @@ void XTypeEngine::writeRecentEvents() {
         std::fputs(json.c_str(), f);
         std::fclose(f);
         std::rename(tmp.c_str(), dst.c_str());
+    }
+}
+
+// ── Active apps discovery ─────────────────────────────────────────────────────
+
+void XTypeEngine::loadActiveApps() {
+    if (_activeAppsPath.empty()) return;
+    std::ifstream in(_activeAppsPath);
+    if (!in) return;
+    std::string content((std::istreambuf_iterator<char>(in)),
+                         std::istreambuf_iterator<char>());
+
+    // Extract each {"name":"..."} object from the "apps" array.
+    size_t pos = content.find("\"name\"");
+    while (pos != std::string::npos) {
+        size_t colon = content.find(':', pos);
+        if (colon == std::string::npos) break;
+        size_t q1 = content.find('"', colon + 1);
+        if (q1 == std::string::npos) break;
+        size_t q2 = content.find('"', q1 + 1);
+        if (q2 == std::string::npos) break;
+        std::string name = content.substr(q1 + 1, q2 - q1 - 1);
+        if (!name.empty())
+            _seenApps.insert(name);
+        pos = content.find("\"name\"", q2 + 1);
+    }
+    dbg("[active_apps] seeded %zu apps from disk", _seenApps.size());
+}
+
+void XTypeEngine::writeActiveApps() {
+    if (_activeAppsPath.empty()) return;
+
+    // Read existing file to preserve timestamps for already-known apps.
+    std::map<std::string, std::time_t> existing;
+    {
+        std::ifstream in(_activeAppsPath);
+        if (in) {
+            std::string content((std::istreambuf_iterator<char>(in)),
+                                 std::istreambuf_iterator<char>());
+            // Parse: "name":"...", "last_seen":<ts>  (within each object)
+            size_t i = 0;
+            while (true) {
+                size_t namePos = content.find("\"name\"", i);
+                if (namePos == std::string::npos) break;
+                size_t colon = content.find(':', namePos);
+                if (colon == std::string::npos) break;
+                size_t q1 = content.find('"', colon + 1);
+                if (q1 == std::string::npos) break;
+                size_t q2 = content.find('"', q1 + 1);
+                if (q2 == std::string::npos) break;
+                std::string name = content.substr(q1 + 1, q2 - q1 - 1);
+
+                std::time_t ts = 0;
+                size_t lsPos = content.find("\"last_seen\"", q2);
+                size_t nextObj = content.find("\"name\"", q2 + 1);
+                if (lsPos != std::string::npos &&
+                    (nextObj == std::string::npos || lsPos < nextObj)) {
+                    size_t lsColon = content.find(':', lsPos);
+                    if (lsColon != std::string::npos) {
+                        char *end;
+                        ts = static_cast<std::time_t>(std::strtoll(
+                            content.c_str() + lsColon + 1, &end, 10));
+                    }
+                }
+                if (!name.empty()) existing[name] = ts;
+                i = q2 + 1;
+            }
+        }
+    }
+
+    std::time_t now = std::time(nullptr);
+    auto esc = [](const std::string &s) {
+        std::string out;
+        for (char c : s) {
+            if (c == '"')       out += "\\\"";
+            else if (c == '\\') out += "\\\\";
+            else if (c == '\n') out += "\\n";
+            else                out += c;
+        }
+        return out;
+    };
+
+    std::string json = "{\n  \"apps\": [\n";
+    bool first = true;
+    for (const auto &name : _seenApps) {
+        if (!first) json += ",\n";
+        first = false;
+        std::time_t ts = now;
+        auto it = existing.find(name);
+        if (it != existing.end() && it->second > 0)
+            ts = it->second;
+        std::string escaped = esc(name);
+        char entry[256];
+        std::snprintf(entry, sizeof(entry),
+            "    {\"name\":\"%s\",\"display\":\"%s\",\"last_seen\":%" PRId64 "}",
+            escaped.c_str(), escaped.c_str(), static_cast<int64_t>(ts));
+        json += entry;
+    }
+    json += "\n  ]\n}\n";
+
+    std::string tmp = _activeAppsPath + ".tmp";
+    if (FILE* f = std::fopen(tmp.c_str(), "w")) {
+        std::fputs(json.c_str(), f);
+        std::fclose(f);
+        std::rename(tmp.c_str(), _activeAppsPath.c_str());
+        dbg("[active_apps] wrote %zu apps", _seenApps.size());
     }
 }
 

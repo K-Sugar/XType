@@ -4,6 +4,7 @@
 #include <QString>
 #include <QTimer>
 #include <QProcess>
+#include <QVariantList>
 #include <cstdint>
 
 class EngineProbe : public QObject {
@@ -12,8 +13,9 @@ class EngineProbe : public QObject {
     Q_PROPERTY(double  ramGb        READ ramGb        NOTIFY ramGbChanged)
     Q_PROPERTY(QString state        READ state        NOTIFY stateChanged)
     Q_PROPERTY(QString stateMessage READ stateMessage NOTIFY stateMessageChanged)
-    Q_PROPERTY(int     latencyP50      READ latencyP50      NOTIFY latencyP50Changed)
-    Q_PROPERTY(bool    ollamaReachable READ ollamaReachable NOTIFY ollamaReachableChanged)
+    Q_PROPERTY(int          latencyP50      READ latencyP50      NOTIFY latencyP50Changed)
+    Q_PROPERTY(bool         ollamaReachable READ ollamaReachable NOTIFY ollamaReachableChanged)
+    Q_PROPERTY(QVariantList activeApps      READ activeApps      NOTIFY activeAppsChanged)
 
 public:
     explicit EngineProbe(QObject *parent = nullptr);
@@ -22,8 +24,9 @@ public:
     double  ramGb()        const { return _ramGb; }
     QString state()        const { return _state; }
     QString stateMessage() const { return _stateMessage; }
-    int     latencyP50()      const { return _latencyP50; }
-    bool    ollamaReachable() const { return _ollamaReachable; }
+    int          latencyP50()      const { return _latencyP50; }
+    bool         ollamaReachable() const { return _ollamaReachable; }
+    QVariantList activeApps()      const { return _activeApps; }
 
 signals:
     void cpuPctChanged();
@@ -32,6 +35,7 @@ signals:
     void stateMessageChanged();
     void latencyP50Changed();
     void ollamaReachableChanged();
+    void activeAppsChanged();
 
 private slots:
     void poll();
@@ -49,8 +53,9 @@ private:
     double  _ramGb         = 0.0;
     QString _state         = "paused";
     QString _stateMessage;
-    int     _latencyP50       = 0;
-    bool    _ollamaReachable  = true;
+    int          _latencyP50       = 0;
+    bool         _ollamaReachable  = true;
+    QVariantList _activeApps;
 
     // CPU delta tracking
     int         _lastPid      = -1;
