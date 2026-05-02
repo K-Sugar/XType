@@ -15,6 +15,11 @@ Item {
     implicitWidth: 220
     implicitHeight: 22
     opacity: comingSoon ? 0.45 : 1.0
+    activeFocusOnTab: true
+    Accessible.role: Accessible.Slider
+    Accessible.minimumValue: min
+    Accessible.maximumValue: max
+    Accessible.value: value
     Accessible.description: comingSoon ? "Not yet wired into the engine" : ""
 
     readonly property real _pct: max > min ? (value - min) / (max - min) : 0
@@ -82,5 +87,16 @@ Item {
         const p = Math.max(0, Math.min(1, mx / trackArea.width))
         const raw = root.min + p * (root.max - root.min)
         root.value = Math.max(root.min, Math.min(root.max, Math.round(raw / root.step) * root.step))
+    }
+
+    Rectangle {
+        anchors.fill: parent
+        anchors.margins: -2
+        radius: 8
+        color: "transparent"
+        border.color: Theme.purple
+        border.width: 2
+        visible: root.activeFocus
+        z: 10
     }
 }

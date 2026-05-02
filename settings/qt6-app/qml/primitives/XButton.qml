@@ -11,6 +11,7 @@ Item {
     implicitWidth: labelText.implicitWidth + 28
     implicitHeight: 32
     opacity: comingSoon ? 0.45 : 1.0
+    activeFocusOnTab: true
     Accessible.role: Accessible.Button
     Accessible.name: label
     Accessible.description: comingSoon ? "Not yet wired into the engine" : ""
@@ -51,5 +52,16 @@ Item {
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
         onClicked: root.clicked()
+    }
+
+    Rectangle {
+        anchors.fill: parent
+        anchors.margins: -2
+        radius: Theme.radius.btn + 2
+        color: "transparent"
+        border.color: Theme.purple
+        border.width: 2
+        visible: root.activeFocus
+        z: 10
     }
 }

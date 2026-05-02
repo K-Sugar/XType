@@ -14,7 +14,9 @@ Item {
     implicitHeight: 30
     implicitWidth: 200
     opacity: comingSoon ? 0.45 : 1.0
-    Accessible.description: comingSoon ? "Not yet wired into the engine" : ""
+    Accessible.role: Accessible.RadioButton
+    Accessible.name: root.options.length > root.selectedIndex ? root.options[root.selectedIndex] : ""
+    Accessible.description: comingSoon ? "Not yet wired into the engine" : "Segmented control"
 
     Rectangle {
         anchors.fill: parent
@@ -50,6 +52,9 @@ Item {
         signal segClicked()
 
         opacity: optComingSoon ? 0.45 : 1.0
+        Accessible.role: Accessible.RadioButton
+        Accessible.checked: segRoot.active
+        Accessible.name: segRoot.segLabel
         Accessible.description: optComingSoon ? "Not yet wired into the engine" : ""
 
         ToolTip.text: "Not yet wired into the engine"

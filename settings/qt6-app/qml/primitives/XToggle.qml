@@ -10,6 +10,7 @@ Item {
     implicitWidth: 36
     implicitHeight: 20
     opacity: comingSoon ? 0.45 : 1.0
+    activeFocusOnTab: true
     Accessible.role: Accessible.CheckBox
     Accessible.checked: on
     Accessible.description: comingSoon ? "Not yet wired into the engine" : ""
@@ -43,5 +44,18 @@ Item {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
         onClicked: root.toggled(!root.on)
+    }
+
+    Keys.onSpacePressed: root.toggled(!root.on)
+
+    Rectangle {
+        anchors.fill: parent
+        anchors.margins: -2
+        radius: 999
+        color: "transparent"
+        border.color: Theme.purple
+        border.width: 2
+        visible: root.activeFocus
+        z: 10
     }
 }
