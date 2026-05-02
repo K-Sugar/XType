@@ -318,3 +318,39 @@ TEST_CASE("resetAll: backup file exists, main file reverts to defaults", "[confi
     CHECK(cs2.model()      == "qwen2.5:1.5b");
     CHECK(cs2.debounceMs() == 220);
 }
+
+// ------------------------------------------------------------------ 11
+TEST_CASE("ollamaHost round-trip", "[config_store]") {
+    QTemporaryDir tmp; REQUIRE(tmp.isValid());
+    const QString dst = tmp.filePath("config.toml");
+
+    {
+        ConfigStore cs(dst);
+        cs.load();
+        cs.setOllamaHost("http://192.168.1.10:11434");
+        cs.saveNow();
+    }
+
+    ConfigStore cs2(dst);
+    cs2.load();
+
+    CHECK(cs2.ollamaHost() == "http://192.168.1.10:11434");
+}
+
+// ------------------------------------------------------------------ 12
+TEST_CASE("minContextChars round-trip", "[config_store]") {
+    QTemporaryDir tmp; REQUIRE(tmp.isValid());
+    const QString dst = tmp.filePath("config.toml");
+
+    {
+        ConfigStore cs(dst);
+        cs.load();
+        cs.setMinContextChars(42);
+        cs.saveNow();
+    }
+
+    ConfigStore cs2(dst);
+    cs2.load();
+
+    CHECK(cs2.minContextChars() == 42);
+}

@@ -52,6 +52,17 @@ Item {
                     }
                 }
                 XRow {
+                    label: "Minimum context"
+                    desc: "Characters of context required before requesting"
+                    width: parent.width
+                    XSlider {
+                        min: 1; max: 100; step: 1
+                        value: Config.minContextChars
+                        onCommitted: (v) => Config.minContextChars = v
+                        width: 200
+                    }
+                }
+                XRow {
                     label: "Max suggestion length"
                     width: parent.width
                     XSlider {

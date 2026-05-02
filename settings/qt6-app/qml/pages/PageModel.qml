@@ -104,6 +104,16 @@ Item {
                 spacing: 0
 
                 XRow {
+                    label: "Ollama host"
+                    desc: "Requires engine reload"
+                    width: parent.width
+                    XInput {
+                        width: 280
+                        text: Config.ollamaHost
+                        onEditingFinished: Config.ollamaHost = text
+                    }
+                }
+                XRow {
                     label: "Context window"
                     desc: "Tokens of context fed to the model"
                     width: parent.width
