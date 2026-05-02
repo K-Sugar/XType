@@ -100,13 +100,34 @@ Item {
                     }
                 }
                 XRow {
-                    label: "Forget after 30 days"
-                    desc: "Prune sentences older than 30 days"
-                    isLast: true
+                    label: "Forget old entries"
+                    desc: "Prune corpus sentences older than the cutoff"
+                    isLast: Config.forgetAfterDays === 0
                     width: parent.width
                     XToggle {
+                        id: forgetToggle
                         on: Config.forgetAfterDays > 0
-                        onToggled: (v) => Config.forgetAfterDays = (v ? 30 : 0)
+                        onToggled: (v) => {
+                            if (!v) Config.forgetAfterDays = 0
+                            else Config.forgetAfterDays = forgetDaysSlider.value
+                        }
+                    }
+                }
+                XRow {
+                    visible: Config.forgetAfterDays > 0
+                    label: "Days to keep"
+                    desc: ""
+                    isLast: true
+                    width: parent.width
+                    XSlider {
+                        id: forgetDaysSlider
+                        min: 1; max: 365; step: 1
+                        value: Config.forgetAfterDays > 0 ? Config.forgetAfterDays : 30
+                        formatFn: function(v) { return v + (v === 1 ? " day" : " days") }
+                        width: 200
+                        onCommitted: (v) => {
+                            if (Config.forgetAfterDays > 0) Config.forgetAfterDays = v
+                        }
                     }
                 }
             }

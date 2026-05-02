@@ -120,11 +120,11 @@ Item {
                     isLast: true
                     width: parent.width
                     XSlider {
-                        min: 1; max: 12; step: 1
+                        min: 0; max: 12; step: 1
                         value: Config.threads ?? 0
                         formatFn: function(v) { return (v === null || v === undefined || v === 0) ? "auto" : v + " threads" }
                         width: 200
-                        onCommitted: (v) => Config.threads = v
+                        onCommitted: (v) => { Config.threads = (v === 0) ? null : v }
                     }
                 }
             }

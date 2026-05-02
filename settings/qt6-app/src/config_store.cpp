@@ -173,7 +173,7 @@ void ConfigStore::writeToml(const QString &path) {
     inf.insert_or_assign("temperature",       _temperature);
     inf.insert_or_assign("top_p",             _topP);
     writeStringArray(inf, "stop_tokens", _stopTokens);
-    if (_threads.isValid())
+    if (_threads.isValid() && !_threads.isNull())
         inf.insert_or_assign("threads", static_cast<int64_t>(_threads.toInt()));
     root.insert_or_assign("inference", std::move(inf));
 

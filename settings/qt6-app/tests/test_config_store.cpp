@@ -288,6 +288,41 @@ TEST_CASE("parse error emits parseError signal for malformed TOML", "[config_sto
     CHECK(!capturedMsg.contains(malformedPath));
 }
 
+// ------------------------------------------------------------------ 11
+TEST_CASE("setThreads null-type variant omits threads key from TOML", "[config_store]") {
+    QTemporaryDir tmp; REQUIRE(tmp.isValid());
+    const QString dst = tmp.filePath("config.toml");
+
+    // Establish threads = 4
+    {
+        ConfigStore cs(dst);
+        cs.load();
+        cs.setThreads(QVariant(4));
+        cs.saveNow();
+    }
+    {
+        ConfigStore cs(dst);
+        cs.load();
+        REQUIRE(cs.threads().isValid());
+        CHECK(cs.threads().toInt() == 4);
+    }
+
+    // Simulate QML `Config.threads = null` — Qt 6 converts JS null to Nullptr-type QVariant
+    {
+        ConfigStore cs(dst);
+        cs.load();
+        cs.setThreads(QVariant::fromValue(nullptr));
+        cs.saveNow();
+    }
+
+    // Reload: threads key must be absent
+    {
+        ConfigStore cs(dst);
+        cs.load();
+        CHECK(!cs.threads().isValid());
+    }
+}
+
 // ------------------------------------------------------------------ 9
 TEST_CASE("resetAll: backup file exists, main file reverts to defaults", "[config_store]") {
     QTemporaryDir tmp; REQUIRE(tmp.isValid());
