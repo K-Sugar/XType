@@ -143,7 +143,18 @@ void XTypeEngine::reloadConfig() {
 
     bool learningWas = _cfg.learning.enabled;
     bool learningNow = newCfg.learning.enabled;
+    bool engineWas   = _cfg.behaviour.engine_enabled;
     _cfg = newCfg;
+
+    if (engineWas && !_cfg.behaviour.engine_enabled) {
+        // Toggled off from the settings app: drop the armed debounce timer and any
+        // in-flight request so neither can paint ghost text after the switch. _ctx is
+        // deliberately left intact — keyEvent's disabled branch needs to still see the
+        // live suggestion to clear the on-screen preedit, and that is the first point
+        // an InputContext is available to clear it with.
+        resetInferenceOnly();
+        dbg("[reload] engine disabled — pending inference cancelled");
+    }
 
     if (learningWas && !learningNow) {
         _corpus.reset();
@@ -225,6 +236,19 @@ void XTypeEngine::keyEvent(const fcitx::InputMethodEntry &,
     if (event.isRelease()) return;
 
     auto *ic = event.inputContext();
+
+    // Master switch. When behaviour.engine_enabled is false the engine is inert:
+    // every key passes through untouched, no context is buffered, no inference is
+    // armed. Checked ahead of the blocklist and the per-app override so that
+    // nothing downstream — including [apps.x] enabled = true — can re-enable it.
+    if (!_cfg.behaviour.engine_enabled) {
+        // Ghost text painted just before the toggle flipped would otherwise linger
+        // in the field, and stale context would be reused on re-enable. resetState()
+        // empties _ctx, so this runs once and later keys hit only the branch test.
+        if (_ctx.hasSuggestion() || !_ctx.contextText().empty())
+            resetState(ic);
+        return;
+    }
 
     // Blocklisted apps pass everything through.
     if (isBlocked(ic->program())) return;
@@ -375,6 +399,11 @@ void XTypeEngine::requestInference(
     fcitx::TrackableObjectReference<fcitx::InputContext> icRef,
     fcitx::InputContext *icPtr)
 {
+    // Belt-and-braces: reloadConfig() cancels the debounce timer when the engine is
+    // switched off, but this callback is the only thing that reaches Ollama, so it
+    // re-checks the master switch rather than trusting the timer was killed in time.
+    if (!_cfg.behaviour.engine_enabled) return;
+
     auto ctx = _ctx.contextText();
     if (static_cast<int>(ctx.size()) < _cfg.inference.min_context_chars)
         return;

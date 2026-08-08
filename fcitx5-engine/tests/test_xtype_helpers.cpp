@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cctype>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -55,4 +56,39 @@ TEST_CASE("isBlocked word-boundary: dash separator") {
     CHECK(blockedBy("kate",       list));
     CHECK(blockedBy("org.kde.kate", list));
     CHECK(!blockedBy("kate-beta", list));
+}
+
+// ── Suggestion gate ───────────────────────────────────────────────────────────
+// Mirrors the pass-through checks at the top of keyEvent(), in the same order:
+// master switch, then app blocklist, then per-app override. The engine itself
+// cannot be unit-tested without a live Fcitx5 instance, so the ordering is
+// asserted here — the master switch must win over every later check.
+
+struct AppOverrideStub { std::optional<bool> enabled; };
+
+static bool suggestsFor(bool engineEnabled,
+                        const std::string& prog,
+                        const std::vector<std::string>& blocklist,
+                        const std::optional<AppOverrideStub>& ov) {
+    if (!engineEnabled) return false;
+    if (blockedBy(prog, blocklist)) return false;
+    if (ov && ov->enabled.has_value() && !*ov->enabled) return false;
+    return true;
+}
+
+TEST_CASE("gate: engine_enabled=false suppresses suggestions everywhere") {
+    CHECK(!suggestsFor(false, "kate",  {}, std::nullopt));
+    CHECK(!suggestsFor(false, "firefox", {}, std::nullopt));
+}
+
+TEST_CASE("gate: engine_enabled=false is not overridable per-app") {
+    // [apps.kate] enabled = true must not resurrect a globally disabled engine.
+    CHECK(!suggestsFor(false, "kate", {}, AppOverrideStub{true}));
+}
+
+TEST_CASE("gate: engine_enabled=true preserves blocklist and per-app opt-out") {
+    CHECK(suggestsFor(true, "kate", {}, std::nullopt));
+    CHECK(!suggestsFor(true, "konsole", {"konsole"}, std::nullopt));
+    CHECK(!suggestsFor(true, "kate", {}, AppOverrideStub{false}));
+    CHECK(suggestsFor(true, "kate", {}, AppOverrideStub{true}));
 }

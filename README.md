@@ -243,6 +243,7 @@ mode                = "Default"
 
 | Key                          | Effect                                                                              |
 |------------------------------|-------------------------------------------------------------------------------------|
+| `engine_enabled`             | Master on/off. When `false` every key passes through and no inference runs; per-app overrides cannot re-enable it. |
 | `model`                      | Any model installed in Ollama. `qwen2.5:0.5b` is faster, `1.5b` is sharper.        |
 | `debounce_ms`                | Idle time before a request is fired. Lower = snappier, higher = less load.         |
 | `accept_full_key`            | Which key accepts the full suggestion: `"tab"`, `"enter"`, or `"right"`.           |
